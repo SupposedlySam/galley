@@ -77,6 +77,16 @@ Paths are under the SDK's `packages/`.
 - `TickerMode(enabled: false)` above the app stops every ticker, so one more pump captures a
   still frame.
 
+### The fake clock
+- A testWidgets body runs inside FakeAsync. Its timers and microtasks wait for a pump, so an
+  awaited real future (file I/O, a socket) never completes, and a `.timeout` set in that zone
+  never fires. Observed 2026-11-25: a mount that wrote a file stalled the run with no output,
+  and `--timeout 20s` did not end it.
+- `tester.runAsync(cb)` runs `cb` in a zone whose timers and microtasks go to the root zone
+  (`flutter_test/lib/src/binding.dart`, `runAsync`). An error inside it is reported to
+  `FlutterError` and the future completes with null; it is not rethrown. So Galley catches
+  inside the callback. Calls cannot nest: a second `runAsync` before the first completes fails.
+
 ### State across `pumpWidget`
 - A widget of the same type in the same slot keeps its `State` across `pumpWidget` calls in one
   test. A new `UniqueKey` above it forces a fresh mount. Observed 2026-11-25.

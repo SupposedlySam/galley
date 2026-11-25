@@ -68,6 +68,12 @@ abstract class GalleyHost {
 - **`mount` is called once per render**, so twice per frame (D4). It must build fresh fakes each
   time. If a fake is shared, the second render sees the first one's changes and the frame becomes
   a determinism error.
+- **`mount` runs on the real clock**, in `tester.runAsync`, with 30 s of real time. A
+  testWidgets body runs on a fake clock that only a pump moves, and nothing pumps while Galley
+  awaits the mount. A mount that awaits real I/O therefore never finished, and the run stalled
+  with no output (observed in the first adopting app, 0.1.1). Rejected: handing `mount` the
+  tester, which would make every host learn the trap. `arrive` stays on the fake clock, because
+  its taps and pumps need it.
 - **What landed is read from the Router**, not asked of the host: the outermost `Router` with a
   parser, its delegate's `currentConfiguration` restored to a uri (BOUNDARY § Landing). An app
   with no Router gets a `landing-unknown` finding, never an assumed match.
@@ -212,7 +218,7 @@ GitHub repo. Before pub.dev, an app pins a tag:
 ```yaml
 dev_dependencies:
   galley:
-    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.1.1}
+    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.1.2}
 ```
 
 - **Why not a path dependency:** CI and fresh clones have no sibling checkout, so `pub get`
@@ -268,6 +274,8 @@ the landing, records the tree and captures pixels. Whatever it had to work aroun
   landing on another uri, or two renders that differ makes the frame an error. Each frame is
   its own test, and an error fails it with a headline: scenario, expected, landed, device,
   errors.
+- **A mount that outruns its budget is an error**, not a stalled run: "mount did not finish
+  within 30 s of real time".
 - **Each render gets a new `KeyedSubtree(UniqueKey())`.** Without it the second render reuses
   the first one's State (its router, its controllers), shows the first one's end state, and the
   determinism check compares a frame with itself. Observed in Galley's own `arrive` test.

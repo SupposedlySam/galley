@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:galley_core/galley_core.dart';
@@ -42,7 +44,21 @@ final class RenderOutcome {
 final class FrameRenderer {
   /// A renderer for [host], recording widgets with [recorder] and checking text against
   /// [fonts].
-  const FrameRenderer({required this.host, required this.recorder, required this.fonts});
+  const FrameRenderer({
+    required this.host,
+    required this.recorder,
+    required this.fonts,
+    this.mountBudget = defaultMountBudget,
+  });
+
+  /// How long, in real time, [GalleyHost.mount] may take.
+  final Duration mountBudget;
+
+  /// Thirty seconds. Seeding fakes takes milliseconds, so a mount still running at thirty is
+  /// waiting on something that will not come, such as a real backend or a completer nobody
+  /// completes. The budget turns that into an error card naming the frame. Without it the run
+  /// stalls with no output.
+  static const defaultMountBudget = Duration(seconds: 30);
 
   /// The app.
   final GalleyHost host;
@@ -77,7 +93,7 @@ final class FrameRenderer {
     var frozen = false;
     try {
       try {
-        final app = await host.mount(frame);
+        final app = await _mount(tester, frame);
         await tester.pumpWidget(
           ValueListenableBuilder<bool>(
             valueListenable: tickers,
@@ -156,6 +172,46 @@ final class FrameRenderer {
     }
   }
 
+  /// Runs [GalleyHost.mount] in real time, within [mountBudget].
+  ///
+  /// A testWidgets body runs on a fake clock, and only a pump moves it. Nothing pumps while the
+  /// body awaits `mount`. So a mount that awaits real work, such as a file write or a database
+  /// opened by a fake, never finishes, and the run stalls with no output. Observed in the first
+  /// adopting app: its scenario seeding hung, and a timeout inside the mount never fired
+  /// because fake time stood still. `tester.runAsync` runs the mount on the real clock.
+  ///
+  /// Galley owns this, not the host. The host has no tester in `mount`, and an async mount is
+  /// the norm for an app that seeds fakes. Rejected: passing the tester to `mount`. Every host
+  /// would then have to learn the trap.
+  ///
+  /// Errors are caught inside, not left to `runAsync`. `runAsync` reports an error to
+  /// `FlutterError` and completes with null (flutter_test binding.dart, `runAsync`), which
+  /// would lose the stack's link to the mount.
+  ///
+  /// What a mount starts also runs in real time: a timer it starts ticks on the wall clock, not
+  /// the fake one. Timers that belong to the app start in its widgets, which are built after
+  /// the mount, on the fake clock.
+  Future<Widget> _mount(WidgetTester tester, GalleyFrame frame) async {
+    final result = await tester.runAsync<_Mounted>(() async {
+      try {
+        return _Mounted.app(await host.mount(frame).timeout(mountBudget));
+      } on TimeoutException {
+        return _Mounted.failed(
+          StateError(
+            'mount did not finish within ${mountBudget.inMilliseconds / 1000} s of real time; '
+            'it is waiting on something a fake never answers',
+          ),
+          StackTrace.current,
+        );
+      } on Object catch (e, stack) {
+        return _Mounted.failed(e, stack);
+      }
+    });
+    final mounted = result!;
+    if (mounted.app case final app?) return app;
+    Error.throwWithStackTrace(mounted.error!, mounted.stack!);
+  }
+
   /// Settles, and freezes on timeout. Returns whether it had to freeze.
   ///
   /// flutter_test signals the timeout only as `FlutterError('pumpAndSettle timed out')`
@@ -211,4 +267,14 @@ final class FrameRenderer {
 
   static String _firstFrames(StackTrace stack) =>
       stack.toString().split('\n').where((l) => l.trim().isNotEmpty).take(6).join('\n');
+}
+
+/// What a mount produced: the app, or what it threw and where.
+final class _Mounted {
+  const _Mounted.app(Widget this.app) : error = null, stack = null;
+  const _Mounted.failed(Object this.error, StackTrace this.stack) : app = null;
+
+  final Widget? app;
+  final Object? error;
+  final StackTrace? stack;
 }

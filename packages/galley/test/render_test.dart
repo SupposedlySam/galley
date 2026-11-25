@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:galley/galley.dart';
@@ -60,16 +63,22 @@ void main() {
   late GalleyFonts fonts;
   setUpAll(() async => fonts = await GalleyFonts.load());
 
-  FrameRenderer renderer(GalleyHost host) => FrameRenderer(
+  FrameRenderer renderer(GalleyHost host, Duration? mountBudget) => FrameRenderer(
     host: host,
     recorder: TreeRecorder(roots: ['${_cwd()}/test/support']),
     fonts: fonts,
+    mountBudget: mountBudget ?? FrameRenderer.defaultMountBudget,
   );
 
-  Future<RenderOutcome> render(WidgetTester tester, GalleyHost host, GalleyFrame frame) async {
+  Future<RenderOutcome> render(
+    WidgetTester tester,
+    GalleyHost host,
+    GalleyFrame frame, {
+    Duration? mountBudget,
+  }) async {
     final undo = _builtIn.apply(tester, frame.key);
     try {
-      return await renderer(host).render(tester, frame);
+      return await renderer(host, mountBudget).render(tester, frame);
     } finally {
       undo();
     }
@@ -138,6 +147,44 @@ void main() {
     final o = await render(tester, _ThrowingHost(), _frame('/home'));
     expect(o.errors.single, startsWith('Bad state: no fakes'));
     expect(o.errors.single, contains('render_test.dart'));
+  });
+
+  // Observed in the first adopting app: a mount that seeded its fakes with real I/O hung the run
+  // with no output, because a testWidgets body runs on a fake clock that nothing advanced.
+  testWidgets('a mount that awaits real I/O renders, on the fake clock of a widget test', (
+    tester,
+  ) async {
+    final host = _RealIoHost(() async {});
+    final o = await render(tester, host, _frame('/home'));
+    expect(o.errors, isEmpty);
+    expect(o.landing, isA<LandedAt>().having((l) => l.uri.path, 'path', '/home'));
+    expect(host.wrote, isTrue, reason: 'the real write finished before the app was pumped');
+  });
+
+  testWidgets('a mount that throws after real I/O is an error with its stack', (tester) async {
+    final o = await render(
+      tester,
+      _RealIoHost(() async => throw StateError('seed failed')),
+      _frame('/home'),
+    );
+    expect(o.errors, hasLength(1));
+    expect(o.errors.single, startsWith('Bad state: seed failed'));
+    expect(o.errors.single, contains('render_test.dart'));
+    expect(o.pixels, isNotNull, reason: 'the error card still has a picture');
+  });
+
+  testWidgets('a mount that never finishes is an error naming the budget, not a stalled run', (
+    tester,
+  ) async {
+    final o = await render(
+      tester,
+      _NeverMountsHost(),
+      _frame('/home'),
+      mountBudget: const Duration(milliseconds: 200),
+    );
+    expect(o.errors, hasLength(1));
+    expect(o.errors.single, contains('mount did not finish within 0.2 s of real time'));
+    expect(o.pixels, isNotNull);
   });
 
   testWidgets('an animation that never ends is frozen, said so, and still captured', (
@@ -246,6 +293,32 @@ void main() {
 class _ThrowingHost extends ToyHost {
   @override
   Future<Widget> mount(GalleyFrame frame) async => throw StateError('no fakes');
+}
+
+/// Mounts the toy app after a real file write, then runs [after].
+class _RealIoHost extends ToyHost {
+  _RealIoHost(this.after);
+
+  final Future<void> Function() after;
+  var wrote = false;
+
+  @override
+  Future<Widget> mount(GalleyFrame frame) async {
+    final dir = await Directory.systemTemp.createTemp('galley_mount');
+    try {
+      await File('${dir.path}/seed.json').writeAsString('{}');
+      wrote = true;
+    } finally {
+      await dir.delete(recursive: true);
+    }
+    await after();
+    return super.mount(frame);
+  }
+}
+
+class _NeverMountsHost extends ToyHost {
+  @override
+  Future<Widget> mount(GalleyFrame frame) => Completer<Widget>().future;
 }
 
 String _cwd() => Uri.base.toFilePath().replaceAll(RegExp(r'/$'), '');

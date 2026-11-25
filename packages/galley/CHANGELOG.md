@@ -3,6 +3,13 @@
 All notable changes to this package. It follows [semantic versioning](https://semver.org): before
 1.0, a minor version may break the API and a patch never does.
 
+## 0.1.2
+
+- Fixed: a `mount` that awaited real work (a file write, a database a fake opens) hung the
+  run with no output. `mount` now runs on the real clock, in `tester.runAsync`.
+- A mount that does not finish within 30 s of real time is an error card naming the frame,
+  not a stalled run. `FrameRenderer.mountBudget` sets the budget.
+
 ## 0.1.1
 
 - Licensed under the MIT License.

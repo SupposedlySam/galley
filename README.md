@@ -4,7 +4,7 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.1.1, the renderer.** Galley renders and records a round of frames from inside an
+**Status: 0.1.2, the renderer.** Galley renders and records a round of frames from inside an
 app's own `flutter test`. The canvas, server and CLI that reviewers use are not built yet
 ([what is planned](docs/DESIGN.md#d1--packages-split-by-what-they-may-depend-on-2026-11-25)).
 
@@ -23,7 +23,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.1.1
+      ref: v0.1.2
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -50,7 +50,7 @@ class MyAppHost extends GalleyHost {
   @override
   List<String> get sourceRoots => const ['lib', 'packages/ui'];
 
-  // Called for every render. Build fresh fakes each time.
+  // Called for every render, on the real clock. Build fresh fakes each time.
   @override
   Future<Widget> mount(GalleyFrame frame) async =>
       MyApp(fakes: Fakes.forScenario(frame.scenario.name), opening: frame.uri);
