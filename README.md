@@ -4,7 +4,7 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.1.0, the renderer.** Galley renders and records a round of frames from inside an
+**Status: 0.1.1, the renderer.** Galley renders and records a round of frames from inside an
 app's own `flutter test`. The canvas, server and CLI that reviewers use are not built yet
 ([what is planned](docs/DESIGN.md#d1--packages-split-by-what-they-may-depend-on-2026-11-25)).
 
@@ -23,7 +23,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.1.0
+      ref: v0.1.1
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -103,3 +103,7 @@ dart format -l 100 packages
 (cd packages/galley_core && dart analyze && dart test)
 (cd packages/galley && flutter analyze && flutter test)
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
