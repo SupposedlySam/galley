@@ -1,0 +1,11 @@
+name: galley_core
+description: "The shared model of Galley: frame keys, frame trees, marks, anchors and re-anchoring. Pure Dart."
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.0
