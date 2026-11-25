@@ -170,7 +170,7 @@ final class Lost extends Reanchoring {
   /// otherwise the reviewer can be shown "it may be one of these".
   ///
   /// Several candidates is Lost, not a guess at the first. A mark silently moved onto the
-  /// wrong one of three identical cards looks like success and is not (CLAUDE.md, "An unknown
+  /// wrong one of three identical cards looks like success and is not (DESIGN.md, "An unknown
   /// is never nothing").
   final List<WidgetNode> candidates;
 }

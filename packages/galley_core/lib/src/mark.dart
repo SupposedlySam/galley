@@ -98,7 +98,7 @@ final class Answer {
 }
 
 /// Something that happened to a mark. A mark's history is a list of these, only ever appended
-/// to; its status is what they add up to (CLAUDE.md, "nothing is erased").
+/// to; its status is what they add up to (DESIGN.md, "nothing is erased").
 sealed class MarkEvent {
   const MarkEvent({required this.by, required this.at});
 
