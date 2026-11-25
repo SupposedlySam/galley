@@ -1,0 +1,2 @@
+# Only what an app needs: lib, README, CHANGELOG, LICENSE, pubspec. The tests stay in the repo.
+test/

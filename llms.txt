@@ -1,0 +1,36 @@
+# Galley
+
+> Galley renders every screen × state × device of a Flutter app as a frame, from inside the
+> app's own `flutter test`, for design review. Version 0.1.0 is the renderer: it writes a round
+> of PNGs, widget trees and frame records to disk. The review canvas, server and CLI are not
+> built yet.
+
+An app adopts Galley by writing one `GalleyHost` subclass in `test/` and calling
+`galley(host)` from a test's `main`. The host declares scenarios (a name and the uris it
+shows), optionally axes and source roots, and `mount(frame)`, which returns the app on fresh
+fakes opening at `frame.uri`. `arrive(tester, frame)` is only for screens no uri reaches.
+
+Run `flutter test <file> --dart-define=GALLEY_OUT=<dir>` to write a round. Without
+`GALLEY_OUT` the file is a CI check. Each frame renders twice. A difference, a throw, or a
+landing on another uri (read from the app's `Router`) makes it an error. Workarounds are
+findings: `landing-unknown`, `frozen`, `missing-font`, `default-font`, `network-image`,
+`unpainted`.
+
+Galley never imports an app, and frames never reach a real backend. An unknown is never
+reported as nothing.
+
+## Docs
+
+- [README](README.md): adopting Galley, the host, running a round, what a round contains
+- [Design decisions](docs/DESIGN.md): principles and decisions D1–D10, with what each rejected
+- [Boundary](docs/BOUNDARY.md): what Galley assumes about Flutter 3.50, with citations
+
+## Packages
+
+- [galley](packages/galley/README.md): the Flutter, test-time package an app depends on
+- [galley_core](packages/galley_core/README.md): the pure-Dart model: frame keys, trees, anchors, re-anchoring, marks, planner, records
+
+## Optional
+
+- [galley changelog](packages/galley/CHANGELOG.md)
+- [galley_core changelog](packages/galley_core/CHANGELOG.md)
