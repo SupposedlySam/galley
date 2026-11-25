@@ -82,6 +82,25 @@ void main() {
     expect(headlines.every((m) => m.group(1)!.contains('screen=drift')), isTrue);
   });
 
+  test('the child run says where the round went', () {
+    final stdout = run.stdout as String;
+    expect(stdout, contains('Galley: wrote 6 of 6 planned frames (2 errors) to ${out.path}'));
+  });
+
+  group('summary', () {
+    test('without an output directory, it says nothing was kept and how to keep it', () {
+      final line = summary(out: null, planned: 155, rendered: 155, errors: 0);
+      expect(line, startsWith('Galley: rendered 155 of 155 planned frames (0 errors) twice'));
+      expect(line, contains('wrote nothing: GALLEY_OUT is not set'));
+      expect(line, contains('--dart-define=GALLEY_OUT='));
+    });
+
+    test('with one, it names the directory and the count', () {
+      final line = summary(out: Directory('build/r1'), planned: 7, rendered: 5, errors: 2);
+      expect(line, 'Galley: wrote 5 of 7 planned frames (2 errors) to build/r1');
+    });
+  });
+
   test('fileName is the key with ; as ,', () {
     final key = FrameKey({'screen': 'home', 'device': 'pixel-7'});
     expect(fileName(key), 'device=pixel-7,screen=home');

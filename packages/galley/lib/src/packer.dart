@@ -68,6 +68,16 @@ void galley(GalleyHost host) {
   }
 
   tearDownAll(() {
+    // Said either way. A round with no output directory looked like a bug to the first adopting
+    // app: 155 renders, "All tests passed!", and no files.
+    print(
+      summary(
+        out: out,
+        planned: frames.length,
+        rendered: records.length,
+        errors: records.where((r) => r.status == FrameStatus.error).length,
+      ),
+    );
     if (out == null) return;
     File('${out.path}/index.json').writeAsStringSync(
       const JsonEncoder.withIndent('  ').convert({
@@ -170,6 +180,24 @@ String? mismatchOf(RenderOutcome a, RenderOutcome b, double pixelRatio) {
     }
   }
   return null;
+}
+
+/// The line printed at the end of a round: how many frames rendered, and where they went.
+///
+/// [rendered] can be below [planned] when a run was filtered (`--plain-name`) or cut short.
+@visibleForTesting
+String summary({
+  required Directory? out,
+  required int planned,
+  required int rendered,
+  required int errors,
+}) {
+  final counts = '$rendered of $planned planned frames ($errors errors)';
+  if (out == null) {
+    return 'Galley: rendered $counts twice and wrote nothing: GALLEY_OUT is not set. '
+        'Add --dart-define=GALLEY_OUT=<dir> to keep the round.';
+  }
+  return 'Galley: wrote $counts to ${out.path}';
 }
 
 /// The failure message of an error frame: every fact a reader needs to find it, in one place.

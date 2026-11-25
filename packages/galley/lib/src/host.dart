@@ -41,6 +41,11 @@ abstract class GalleyHost {
   /// every call. A fake shared between calls lets the second render see the first one's changes,
   /// and the frame becomes a determinism error that is really a test-setup bug.
   ///
+  /// Galley pumps each app under a new key. A test of your own that pumps one mounted app after
+  /// another into the same tester needs one too, such as `KeyedSubtree(key: UniqueKey(), …)`.
+  /// Otherwise the second app keeps the first one's State (its router, its controllers) and
+  /// shows where the first one ended.
+  ///
   /// It runs on the real clock, so it may await real work: a file a fake writes, a database it
   /// opens. It has 30 s of real time to finish (`FrameRenderer.mountBudget`); a mount that never
   /// does is an error card. A timer started here ticks in real time too, so start timers in the

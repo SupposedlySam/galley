@@ -3,6 +3,14 @@
 All notable changes to this package. It follows [semantic versioning](https://semver.org): before
 1.0, a minor version may break the API and a patch never does.
 
+## 0.1.3
+
+- A round ends with one line saying how many frames rendered and where they went. Without
+  `GALLEY_OUT` the line says nothing was written and how to keep the round. Before, such a run
+  passed with no files and no word about why.
+- `GalleyHost.mount` says that a test of the app's own, pumping one mounted app after another,
+  needs a new key above each, as Galley uses.
+
 ## 0.1.2
 
 - Fixed: a `mount` that awaited real work (a file write, a database a fake opens) hung the
