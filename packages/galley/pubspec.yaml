@@ -1,0 +1,28 @@
+name: galley
+description: "Renders every screen × state × device of a Flutter app as a reviewable frame, inside the app's own flutter test."
+version: 0.1.0
+repository: https://github.com/SupposedlySam/galley/tree/main/packages/galley
+issue_tracker: https://github.com/SupposedlySam/galley/issues
+topics: [design, testing, screenshots, review]
+# Until the pub.dev release (docs/DESIGN.md D8), which also replaces the galley_core path below.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+  flutter: ">=3.50.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Test-time by design (docs/DESIGN.md D1, D3): the packer runs inside the app's flutter test.
+  flutter_test:
+    sdk: flutter
+  # By path while apps pin a git tag (docs/DESIGN.md D8): a git dependency resolves a path
+  # inside its own repo. The pub.dev release replaces it with `^<version>`.
+  galley_core:
+    path: ../galley_core
+
+dev_dependencies:
+  lints: ^6.0.0
+  material_ui: ^1.11.0
