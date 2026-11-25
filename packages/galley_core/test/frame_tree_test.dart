@@ -72,4 +72,32 @@ void main() {
       expect(t.deepestAt(500, 900), isNull);
     });
   });
+
+  group('deepestContaining', () {
+    final t = tree([
+      root,
+      node([0], 'Card', rect: const LogicalRect(0, 0, 200, 100)),
+      node([0, 0], 'Text', rect: const LogicalRect(10, 10, 50, 20)),
+      node([0, 1], 'Badge', rect: const LogicalRect(40, 10, 30, 20)),
+    ]);
+
+    test('the smallest widget holding all of the region', () {
+      expect(t.deepestContaining(const LogicalRect(12, 12, 5, 5))?.type, 'Text');
+    });
+    test('a region over two siblings goes to their parent', () {
+      expect(t.deepestContaining(const LogicalRect(12, 12, 50, 5))?.type, 'Card');
+    });
+    test('a region that sticks out of every widget but the root is the root', () {
+      expect(t.deepestContaining(const LogicalRect(150, 50, 100, 10))?.type, 'App');
+    });
+    test('among equals, the one on top', () {
+      expect(t.deepestContaining(const LogicalRect(45, 12, 5, 5))?.type, 'Badge');
+    });
+    test('a region outside the frame has no culprit', () {
+      expect(t.deepestContaining(const LogicalRect(390, 790, 20, 20)), isNull);
+    });
+    test('edges count as inside: a region exactly the Text is the Text', () {
+      expect(t.deepestContaining(const LogicalRect(10, 10, 50, 20))?.type, 'Text');
+    });
+  });
 }

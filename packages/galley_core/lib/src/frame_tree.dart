@@ -142,6 +142,25 @@ final class FrameTree {
     return best;
   }
 
+  /// The deepest node whose box holds all of [region], or null when none does.
+  ///
+  /// This names the culprit of a region that changed: the smallest widget that could have drawn
+  /// all of it. Ties go to the later node, the one on top, the same as in [deepestAt].
+  WidgetNode? deepestContaining(LogicalRect region) {
+    WidgetNode? best;
+    for (final node in nodes) {
+      final r = node.rect;
+      if (region.left < r.left ||
+          region.top < r.top ||
+          region.right > r.right ||
+          region.bottom > r.bottom) {
+        continue;
+      }
+      if (best == null || node.indexPath.length >= best.indexPath.length) best = node;
+    }
+    return best;
+  }
+
   /// The JSON form [FrameTree.fromJson] reads.
   JsonMap toJson() => {
     'bounds': bounds.toJson(),

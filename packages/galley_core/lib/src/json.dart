@@ -3,7 +3,7 @@
 /// Every format Galley stores (a frame tree, a mark, an answer) is read through these. A missing
 /// or mistyped field throws a [FormatException] that names the field. It is never defaulted: a
 /// tree read with a defaulted rect would re-anchor a mark onto the wrong widget and report it as
-/// Exact. That failure looks like success, which is the worst kind (CLAUDE.md, "An unknown is
+/// Exact. That failure looks like success, which is the worst kind (DESIGN.md, "An unknown is
 /// never nothing").
 library;
 
@@ -28,6 +28,9 @@ extension type const JsonReader._(({JsonMap map, String context}) _r) {
 
   /// The required integer at [key].
   int integer(String key) => _required<int>(key, 'an integer');
+
+  /// The required boolean at [key].
+  bool boolean(String key) => _required<bool>(key, 'a boolean');
 
   /// The required number at [key], as a double.
   double number(String key) => _required<num>(key, 'a number').toDouble();
