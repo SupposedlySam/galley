@@ -110,9 +110,17 @@ Paths are under the SDK's `packages/`.
 
 ### Line breaks
 - `RenderParagraph` in 3.50 has no `getLineBoundary` and no `computeLineMetrics` (those are on
-  `TextPainter`, which it keeps private). It has `getBoxesForSelection`, so Galley compares the
-  boxes of two adjacent characters: on different lines means a break between them. Found by
-  compiling against it, 2026-11-25.
+  `TextPainter`, which it keeps private). Found by compiling against it, 2026-11-25.
+- It does have `getOffsetForCaret`, which honors `TextAffinity`. At a soft line break the
+  upstream caret of an offset ends the line above and the downstream one starts the line below,
+  so their x differs. Elsewhere their x is the same. Their y is not a test: where font size
+  changes within one line, the two carets sit at different y (measured in
+  `test/words_test.dart`, "mixed sizes").
+- *Retracted, 0.2.0:* comparing the boxes of adjacent characters, where a break is a second box
+  that starts below the first one's bottom. A glyph box can be taller than the line. In the
+  first adopting app's display face at 2.0×, boxes were 72 tall on lines 66 apart, so boxes on
+  adjacent lines overlapped and no break was ever found. The test font reproduces this with
+  `height` below 1.
 - The line breaker breaks inside a word only when the word alone is wider than the line. In the
   test font every glyph is a square as wide as the font size, so a width in glyphs says exactly
   where it breaks (`test/words_test.dart`).

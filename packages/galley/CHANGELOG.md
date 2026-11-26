@@ -3,6 +3,13 @@
 All notable changes to this package. It follows [semantic versioning](https://semver.org): before
 1.0, a minor version may break the API and a patch never does.
 
+## 0.2.1
+
+- Fix: `broken-word` found no breaks in a face whose glyph boxes are taller than its line, which
+  is common for display faces at a large text scale. Galley now places the two carets at each
+  offset, one on each side of a possible break, and compares their x. Text that is centered,
+  right-aligned or right-to-left, and lines that mix font sizes, are tested.
+
 ## 0.2.0
 
 - New finding, `broken-word`: a line break that falls inside a word, such as a label too wide

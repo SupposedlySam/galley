@@ -1,7 +1,7 @@
 # Galley
 
 > Galley renders every screen × state × device of a Flutter app as a frame, from inside the
-> app's own `flutter test`, for design review. Version 0.2.0 is the renderer: it writes a round
+> app's own `flutter test`, for design review. Version 0.2.1 is the renderer: it writes a round
 > of PNGs, widget trees and frame records to disk. The review canvas, server and CLI are not
 > built yet.
 

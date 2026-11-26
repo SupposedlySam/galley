@@ -28,6 +28,15 @@ const _style = TextStyle(fontSize: 14);
 int _lines(WidgetTester tester) =>
     tester.renderObject<RenderParagraph>(find.byType(RichText)).size.height ~/ 14;
 
+/// How many lines the only paragraph has, from where each character's caret sits: independent of
+/// line height, so it holds when lines are tighter than their glyphs.
+int _lineCount(WidgetTester tester) {
+  final p = tester.renderObject<RenderParagraph>(find.byType(RichText));
+  final n = p.text.toPlainText().length;
+  return {for (var i = 0; i < n; i++) p.getOffsetForCaret(TextPosition(offset: i), Rect.zero).dy}
+      .length;
+}
+
 void main() {
   testWidgets('a word wider than its line is a finding, showing where it broke', (tester) async {
     // 4 glyphs fit; "PLACED" is 6.
@@ -37,6 +46,65 @@ void main() {
     expect(found.single.kind, 'broken-word');
     expect(found.single.message, contains('"PLAC|ED"'));
     expect(found.single.message, startsWith('1 line break(s)'));
+  });
+
+  // Observed in the first adopting app: a display face whose glyph boxes are taller than its
+  // line, so boxes on adjacent lines overlap. A check of top against bottom missed every break.
+  for (final height in [0.5, 0.8, 1.0, 1.1]) {
+    testWidgets('a word broken across lines tighter than its glyphs (height $height) is found', (
+      tester,
+    ) async {
+      final root = await _layout(tester, 4 * 14, [
+        Text('PLACED', style: _style.copyWith(height: height)),
+      ]);
+      expect(_lineCount(tester), 2, reason: 'the positive control: it did break');
+      expect(brokenWordsIn(root).single.message, contains('"PLAC|ED"'));
+    });
+
+    testWidgets('a sentence wrapped at spaces at height $height is not a finding', (tester) async {
+      final root = await _layout(tester, 4 * 14, [
+        Text('GO NOW OR NOT', style: _style.copyWith(height: height)),
+      ]);
+      expect(_lineCount(tester), greaterThan(1));
+      expect(brokenWordsIn(root), isEmpty);
+    });
+  }
+
+  testWidgets('mixed sizes on one line are one line, not a break', (tester) async {
+    final root = await _layout(tester, 400, [
+      const Text.rich(
+        TextSpan(
+          style: _style,
+          children: [
+            TextSpan(text: 'SM'),
+            TextSpan(text: 'BIG', style: TextStyle(fontSize: 40)),
+            TextSpan(text: 'ALL'),
+          ],
+        ),
+      ),
+    ]);
+    expect(brokenWordsIn(root), isEmpty);
+  });
+
+  for (final align in [TextAlign.center, TextAlign.right]) {
+    testWidgets('a break in ${align.name}-aligned text is found', (tester) async {
+      final root = await _layout(tester, 4 * 14, [
+        SizedBox(
+          width: 4 * 14,
+          child: Text('PLACED', style: _style, textAlign: align),
+        ),
+      ]);
+      expect(_lines(tester), 2);
+      expect(brokenWordsIn(root).single.message, contains('"PLAC|ED"'));
+    });
+  }
+
+  testWidgets('a break in right-to-left text is found', (tester) async {
+    final root = await _layout(tester, 4 * 14, [
+      const Text('PLACED', style: _style, textDirection: TextDirection.rtl),
+    ]);
+    expect(_lines(tester), 2);
+    expect(brokenWordsIn(root).single.message, contains('"PLAC|ED"'));
   });
 
   testWidgets('text that wraps at spaces is not a finding, though it does wrap', (tester) async {
