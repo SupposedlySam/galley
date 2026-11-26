@@ -3,6 +3,10 @@
 All notable changes to this package. It follows [semantic versioning](https://semver.org): before
 1.0, a minor version may break the API and a patch never does.
 
+## 0.3.0
+
+- No changes. Released with galley 0.3.0.
+
 ## 0.2.1
 
 - No changes. Released with galley 0.2.1.

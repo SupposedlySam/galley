@@ -3,6 +3,13 @@
 All notable changes to this package. It follows [semantic versioning](https://semver.org): before
 1.0, a minor version may break the API and a patch never does.
 
+## 0.3.0
+
+- New finding, `broken-word-unseen`: a word broken across lines in text that was laid out but is
+  not in the picture, such as a lazy list's rows below the fold or text under a clip. Those
+  breaks were reported as `broken-word` before, so a card could list a word its frame did not
+  show. A frame's `broken-word` count can therefore fall, and `broken-word-unseen` is new.
+
 ## 0.2.1
 
 - Fix: `broken-word` found no breaks in a face whose glyph boxes are taller than its line, which

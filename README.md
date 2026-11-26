@@ -4,7 +4,7 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.2.1, the renderer.** Galley renders and records a round of frames from inside an
+**Status: 0.3.0, the renderer.** Galley renders and records a round of frames from inside an
 app's own `flutter test`. The canvas, server and CLI that reviewers use are not built yet
 ([what is planned](docs/DESIGN.md#d1--packages-split-by-what-they-may-depend-on-2026-11-25)).
 
@@ -23,7 +23,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.2.1
+      ref: v0.3.0
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -105,7 +105,7 @@ different uri than the frame asked for. Galley reads that uri from the app's `Ro
 
 What a frame had to fake is listed on it as a **finding**: an unknown landing, an animation
 frozen after 10 s, a font that was not loaded, a network image drawn as a placeholder, pixels
-the app never painted (DESIGN D10).
+the app never painted, a word broken across lines, inside the picture or out of it (DESIGN D10).
 
 ## Docs
 

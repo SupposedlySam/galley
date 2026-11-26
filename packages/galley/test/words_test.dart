@@ -132,6 +132,61 @@ void main() {
     expect(message, endsWith(', and 8 more'));
   });
 
+  // The test view is 800 × 600. Rows 100 tall: rows 0-5 are on screen, and the list lays out
+  // more below the fold, in its cache extent.
+  Future<RenderObject> list(WidgetTester tester, {required double height}) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 4 * 14,
+            height: height,
+            child: ListView(
+              children: [
+                for (var i = 0; i < 12; i++)
+                  SizedBox(height: 100, child: Text(i == 0 ? 'PLACED' : 'FILLED$i', style: _style)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    return tester.binding.renderViews.single;
+  }
+
+  testWidgets('a break laid out below the fold is reported apart, as not in the picture', (
+    tester,
+  ) async {
+    final root = await list(tester, height: 600);
+    // The positive control: a row below the fold really is laid out, so it is in the tree.
+    expect(find.text('FILLED7', skipOffstage: false), findsOneWidget);
+    expect(find.text('FILLED7'), findsNothing, reason: 'and it is offstage');
+
+    final byKind = {for (final f in brokenWordsIn(root)) f.kind: f.message};
+    expect(byKind.keys, unorderedEquals(['broken-word', 'broken-word-unseen']));
+    // On screen: rows 0-5. PLACED and FILLED1..5.
+    expect(byKind['broken-word'], startsWith('6 line break(s)'));
+    expect(byKind['broken-word'], contains('"PLAC|ED"'));
+    expect(byKind['broken-word'], isNot(contains('FILLED7')));
+    expect(byKind['broken-word-unseen'], contains('"FILL|ED7"'));
+    expect(byKind['broken-word-unseen'], contains('outside the frame'));
+  });
+
+  testWidgets('a break clipped by a short list is not in the picture, though on the screen', (
+    tester,
+  ) async {
+    // A list 150 tall. Row 1's break is at y 100 to 128, inside the list's clip. Row 2's is at
+    // 200 to 228: inside the 600-tall view, outside the clip.
+    final root = await list(tester, height: 150);
+    final byKind = {for (final f in brokenWordsIn(root)) f.kind: f.message};
+    expect(byKind['broken-word'], startsWith('2 line break(s)'));
+    expect(byKind['broken-word'], allOf(contains('"PLAC|ED"'), contains('"FILL|ED1"')));
+    expect(byKind['broken-word-unseen'], contains('"FILL|ED2"'));
+    expect(byKind['broken-word-unseen'], isNot(contains('"FILL|ED1"')));
+  });
+
   testWidgets('a single-line frame has no finding', (tester) async {
     final root = await _layout(tester, 400, [const Text('PLACED', style: _style)]);
     expect(brokenWordsIn(root), isEmpty);

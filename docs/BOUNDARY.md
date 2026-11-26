@@ -124,6 +124,10 @@ Paths are under the SDK's `packages/`.
 - The line breaker breaks inside a word only when the word alone is wider than the line. In the
   test font every glyph is a square as wide as the font size, so a width in glyphs says exactly
   where it breaks (`test/words_test.dart`).
+- A lazy list lays out children past its viewport, in its cache extent, and they are in the
+  render tree: `find.text(.., skipOffstage: false)` finds them and `find.text` does not
+  (`test/words_test.dart`, "below the fold"). Galley clips with each ancestor's
+  `describeApproximatePaintClip`, the method semantics uses to mark a node offscreen.
 
 ### Material
 - `package:flutter/material.dart` is deprecated in 3.50 in favor of `package:material_ui`.

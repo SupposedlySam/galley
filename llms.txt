@@ -1,7 +1,7 @@
 # Galley
 
 > Galley renders every screen × state × device of a Flutter app as a frame, from inside the
-> app's own `flutter test`, for design review. Version 0.2.1 is the renderer: it writes a round
+> app's own `flutter test`, for design review. Version 0.3.0 is the renderer: it writes a round
 > of PNGs, widget trees and frame records to disk. The review canvas, server and CLI are not
 > built yet.
 
@@ -14,7 +14,7 @@ Run `flutter test <file> --dart-define=GALLEY_OUT=<dir>` to write a round. Witho
 `GALLEY_OUT` the file is a CI check. Each frame renders twice. A difference, a throw, or a
 landing on another uri (read from the app's `Router`) makes it an error. Workarounds are
 findings: `landing-unknown`, `frozen`, `missing-font`, `default-font`, `network-image`,
-`unpainted`, `broken-word`.
+`unpainted`, `broken-word`, `broken-word-unseen`.
 
 Galley never imports an app, and frames never reach a real backend. An unknown is never
 reported as nothing.
