@@ -229,8 +229,13 @@ dev_dependencies:
   for a `galley_core` that is not there. The commit that publishes to pub.dev replaces the path
   with `^<version>` and removes `galley`'s `publish_to: none`, because pub.dev refuses path
   dependencies. Until then `publish_to: none` also stops an accidental publish.
-- **Before 1.0**, a minor bump may break the API, and a patch never does (Dart's convention for
-  0.x).
+- **Before 1.0, a minor bump means a breaking change, and only that.** Every other release is a
+  patch, new features included (Dart's convention for 0.x). A change is breaking if an app's
+  host stops compiling, or if a round that passed now fails. A new finding kind, or a finding
+  moving to another kind, is not breaking: a finding never fails a round.
+- *Corrected:* 0.2.0 (the `broken-word` finding) and 0.3.0 (`broken-word-unseen`) were minor
+  bumps for changes that broke nothing, and by the rule above they should have been patches.
+  The tags stay, because an app pins them; numbering continues from 0.3.0.
 
 ## D9 · A round is the essential set plus pairwise cover, with the subject as a factor (2026-11-25)
 

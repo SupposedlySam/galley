@@ -1,7 +1,8 @@
 # Changelog
 
 All notable changes to this package. It follows [semantic versioning](https://semver.org): before
-1.0, a minor version may break the API and a patch never does.
+1.0, a minor version is a breaking change, and every other release, new features included, is a
+patch (DESIGN D8).
 
 ## 0.3.0
 
