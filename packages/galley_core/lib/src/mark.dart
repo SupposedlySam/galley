@@ -1,4 +1,5 @@
 import 'anchor.dart';
+import 'commit.dart';
 import 'frame_key.dart';
 import 'json.dart';
 
@@ -36,7 +37,7 @@ enum AnswerKind {
 final class Answer {
   /// A fix, made in [commit]. [note] is optional.
   Answer.fixed({required String this.commit, this.note}) : kind = AnswerKind.fixed {
-    if (!_sha.hasMatch(commit!)) {
+    if (!isCommitSha(commit!)) {
       throw ArgumentError.value(commit, 'commit', 'must be a 7 to 40 character hex SHA');
     }
   }
@@ -89,7 +90,6 @@ final class Answer {
     }
   }
 
-  static final _sha = RegExp(r'^[0-9a-f]{7,40}$');
   static const _kindNames = {
     AnswerKind.fixed: 'fixed',
     AnswerKind.wontFix: 'wont_fix',
@@ -106,7 +106,7 @@ sealed class MarkEvent {
   factory MarkEvent.fromJson(Object? json, String context) {
     final r = JsonReader(json, context);
     final by = r.string('by');
-    final at = _readTime(r, 'at');
+    final at = r.utcTime('at');
     return switch (r.string('event')) {
       'answered' => Answered(r.read('answer', Answer.fromJson), by: by, at: at),
       'verified' => Verified(by: by, at: at),
@@ -210,7 +210,7 @@ final class Mark {
         pin: r.read('pin', PinOffset.fromJson),
         note: r.string('note'),
         by: r.string('by'),
-        at: _readTime(r, 'at'),
+        at: r.utcTime('at'),
         history: r.readList('history', MarkEvent.fromJson),
       );
     } on StateError catch (e) {
@@ -281,15 +281,4 @@ final class Mark {
     }
     return status;
   }
-}
-
-/// Reads a UTC timestamp. A time without a zone is refused: read as local, it would sort a
-/// designer's mark before Claude's answer to it.
-DateTime _readTime(JsonReader r, String key) {
-  final source = r.string(key);
-  final time = DateTime.tryParse(source);
-  if (time == null || !time.isUtc) {
-    throw FormatException('${r.context}.$key: expected a UTC ISO 8601 time, got "$source"');
-  }
-  return time;
 }

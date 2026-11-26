@@ -73,12 +73,46 @@ final class RoundFrame {
 /// Where a mark is in one round.
 sealed class Placement {
   const Placement();
+
+  /// Reads the form [toJson] writes.
+  factory Placement.fromJson(Object? json, String context) {
+    final r = JsonReader(json, context);
+    return switch (r.string('kind')) {
+      'raised' => const Raised(),
+      'located' => Reanchored(
+        Located(
+          node: r.read('node', WidgetNode.fromJson),
+          decidedBy: _evidence(r, 'decided_by'),
+          considered: r.integer('considered'),
+          overlap: r.number('overlap'),
+        ),
+      ),
+      'lost' => Reanchored(Lost(r.readList('candidates', WidgetNode.fromJson))),
+      'unplaced' => Unplaced(r.string('reason')),
+      'retired' => const Retired(),
+      final other => throw FormatException('$context.kind: unknown placement "$other"'),
+    };
+  }
+
+  /// The JSON form [Placement.fromJson] reads.
+  JsonMap toJson();
+
+  static Evidence _evidence(JsonReader r, String key) {
+    final name = r.string(key);
+    return Evidence.values.firstWhere(
+      (e) => e.name == name,
+      orElse: () => throw FormatException('${r.context}.$key: unknown evidence "$name"'),
+    );
+  }
 }
 
 /// The mark was raised in this round, on the widget it names. Nothing was looked up.
 final class Raised extends Placement {
   /// Raised.
   const Raised();
+
+  @override
+  JsonMap toJson() => {'kind': 'raised'};
 }
 
 /// The mark's frame is in the round with a tree, and its widget was looked up: [result] says
@@ -89,6 +123,21 @@ final class Reanchored extends Placement {
 
   /// What the lookup found.
   final Reanchoring result;
+
+  @override
+  JsonMap toJson() => switch (result) {
+    Located(:final node, :final decidedBy, :final considered, :final overlap) => {
+      'kind': 'located',
+      'node': node.toJson(),
+      'decided_by': decidedBy.name,
+      'considered': considered,
+      'overlap': overlap,
+    },
+    Lost(:final candidates) => {
+      'kind': 'lost',
+      'candidates': [for (final n in candidates) n.toJson()],
+    },
+  };
 }
 
 /// The mark's frame is in the round, but whether its widget is there cannot be judged, for
@@ -104,6 +153,9 @@ final class Unplaced extends Placement {
 
   /// Why it could not be judged.
   final String reason;
+
+  @override
+  JsonMap toJson() => {'kind': 'unplaced', 'reason': reason};
 }
 
 /// The mark's frame is not in the round: the screen, state or axis value was removed. The mark
@@ -112,6 +164,9 @@ final class Unplaced extends Placement {
 final class Retired extends Placement {
   /// Retired.
   const Retired();
+
+  @override
+  JsonMap toJson() => {'kind': 'retired'};
 }
 
 /// A mark, where it is in one round, and the anchor the next round looks for.
@@ -121,6 +176,23 @@ final class Carried {
 
   /// A mark in the round it was raised in.
   Carried.raised(this.mark) : placement = const Raised(), anchor = mark.anchor;
+
+  /// Reads the form [toJson] writes, finding the mark by its id with [markOf].
+  ///
+  /// A placement names its mark by id and does not copy it: the mark's history grows after the
+  /// round, and a copy kept per round would go stale. A placement whose mark [markOf] does not
+  /// have is refused.
+  factory Carried.fromJson(Object? json, String context, Mark? Function(String id) markOf) {
+    final r = JsonReader(json, context);
+    final id = r.string('mark');
+    final mark = markOf(id);
+    if (mark == null) throw FormatException('$context.mark: no mark "$id"');
+    return Carried(
+      mark,
+      r.read('placement', Placement.fromJson),
+      r.read('anchor', Anchor.fromJson),
+    );
+  }
 
   /// The mark, unchanged. Its own [Mark.anchor] stays the anchor as raised.
   final Mark mark;
@@ -140,6 +212,9 @@ final class Carried {
   /// When the widget is not found ([Lost], [Unplaced], [Retired]) this is the last anchor that
   /// was, so a later round that has it again can still find it.
   final Anchor anchor;
+
+  /// The JSON form [Carried.fromJson] reads.
+  JsonMap toJson() => {'mark': mark.id, 'placement': placement.toJson(), 'anchor': anchor.toJson()};
 }
 
 /// A round's frames, for carrying marks into it.

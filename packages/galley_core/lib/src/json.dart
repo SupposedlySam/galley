@@ -72,6 +72,17 @@ extension type const JsonReader._(({JsonMap map, String context}) _r) {
     ];
   }
 
+  /// The required UTC ISO 8601 time at [key]. A time without a zone is refused: read as local,
+  /// it would sort a reviewer's mark before the answer to it.
+  DateTime utcTime(String key) {
+    final source = string(key);
+    final time = DateTime.tryParse(source);
+    if (time == null || !time.isUtc) {
+      throw FormatException('${_r.context}.$key: expected a UTC ISO 8601 time, got "$source"');
+    }
+    return time;
+  }
+
   /// The context this reader names in its errors, such as `tree.nodes[3]`.
   String get context => _r.context;
 

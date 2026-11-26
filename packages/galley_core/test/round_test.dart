@@ -236,6 +236,121 @@ void main() {
     });
   });
 
+  group('Carried JSON', () {
+    // One of every placement, from a real carry, so the JSON is tested on what carry makes.
+    List<Carried> everyPlacement() {
+      final round = Round([
+        RoundFrame(_record(_home), _withBuy(_buy)),
+        RoundFrame(_record(_menu), _withBuy(const LogicalRect(200, 500, 100, 40))),
+        RoundFrame(
+          _record(_cart),
+          tree([
+            root,
+            node([0], 'Text', label: 'Buy'),
+            node([1], 'Text', label: 'Buy'),
+          ]),
+        ),
+        RoundFrame(_record(_gone, status: FrameStatus.error, errors: ['threw']), null),
+      ]);
+      final cartMark = Mark(
+        id: 'lost',
+        frame: _cart,
+        anchor: Anchor(type: 'Text', indexPath: [2], rect: _buy, semanticsLabel: 'Buy'),
+        pin: const PinOffset(0, 0),
+        note: 'n',
+        by: 'r',
+        at: DateTime.utc(2026),
+      );
+      return [
+        Carried.raised(_mark('raised', _home)),
+        ...round.carryAll([
+          Carried.raised(_mark('exact', _home)),
+          Carried.raised(_mark('moved', _menu)),
+          Carried.raised(cartMark),
+          Carried.raised(_mark('unplaced', _gone)),
+          Carried.raised(_mark('retired', FrameKey({'screen': 'x'}))),
+        ]),
+      ];
+    }
+
+    test('every placement round-trips, joined to its mark by id', () {
+      final carried = everyPlacement();
+      final marks = {for (final c in carried) c.mark.id: c.mark};
+      expect(carried.map((c) => c.placement.runtimeType).toSet(), {
+        Raised,
+        Reanchored,
+        Unplaced,
+        Retired,
+      });
+      final lost = (carried[3].placement as Reanchored).result as Lost;
+      expect(lost.candidates, hasLength(2), reason: 'the positive control: Lost has candidates');
+
+      // Read back, each placement says what the original said. JSON against JSON alone passes a
+      // writer and a reader that are wrong the same way.
+      String describe(Placement p) => switch (p) {
+        Raised() => 'raised',
+        Reanchored(
+          result: Located(:final node, :final decidedBy, :final considered, :final overlap),
+        ) =>
+          'located $node by ${decidedBy.name} of $considered at $overlap',
+        Reanchored(result: Lost(:final candidates)) => 'lost among $candidates',
+        Unplaced(:final reason) => 'unplaced: $reason',
+        Retired() => 'retired',
+      };
+      final byLocation = Carried(
+        _mark('by-location', _home),
+        Reanchored(
+          Located(
+            node: node([0, 1], 'Text', at: loc(12)),
+            decidedBy: Evidence.location,
+            considered: 3,
+            overlap: 0.25,
+          ),
+        ),
+        _mark('by-location', _home).anchor,
+      );
+      for (final c in [...carried, byLocation]) {
+        final back = Carried.fromJson(c.toJson(), 'p', (_) => c.mark);
+        expect(describe(back.placement), describe(c.placement));
+      }
+
+      for (final c in carried) {
+        final json = c.toJson();
+        expect(json['mark'], c.mark.id, reason: 'the mark is stored once, not per round');
+        final back = Carried.fromJson(json, 'p', (id) => marks[id]);
+        expect(back.toJson(), json);
+        expect(back.mark, same(c.mark));
+      }
+      final moved = Carried.fromJson(carried[2].toJson(), 'p', (id) => marks[id]);
+      final located = (moved.placement as Reanchored).result as Located;
+      expect(located.isExact, isFalse);
+      expect(located.decidedBy, Evidence.key);
+      expect(located.node.rect, const LogicalRect(200, 500, 100, 40));
+      final lostBack =
+          (Carried.fromJson(carried[3].toJson(), 'p', (id) => marks[id]).placement as Reanchored)
+                  .result
+              as Lost;
+      expect(lostBack.candidates.map((n) => n.indexPath), [
+        [0],
+        [1],
+      ]);
+    });
+
+    test('a placement for a mark nobody has, or of an unknown kind, is refused', () {
+      final c = everyPlacement().first;
+      expect(() => Carried.fromJson(c.toJson(), 'p', (_) => null), throwsFormatException);
+      expect(
+        () =>
+            Carried.fromJson(c.toJson()..['placement'] = {'kind': 'misplaced'}, 'p', (_) => c.mark),
+        throwsFormatException,
+      );
+      expect(
+        () => Carried.fromJson(c.toJson()..remove('anchor'), 'p', (_) => c.mark),
+        throwsFormatException,
+      );
+    });
+  });
+
   group('RoundManifest', () {
     test('reads the index the packer has written since 0.1.0', () {
       final m = RoundManifest.fromJson({
