@@ -3,6 +3,13 @@
 All notable changes to this package. It follows [semantic versioning](https://semver.org): before
 1.0, a minor version may break the API and a patch never does.
 
+## 0.2.0
+
+- New finding, `broken-word`: a line break that falls inside a word, such as a label too wide
+  for a small phone at a large text scale. It lists the words with `|` where they broke. A
+  round that had no findings may now have some; nothing that passed now fails.
+- The README shows how to keep a round out of a plain `flutter test` with a tag.
+
 ## 0.1.3
 
 - A round ends with one line saying how many frames rendered and where they went. Without

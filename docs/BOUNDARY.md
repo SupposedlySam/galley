@@ -108,6 +108,15 @@ Paths are under the SDK's `packages/`.
   `parser.restoreRouteInformation(...)`, whose `uri` is what the platform would show
   (`widgets/router.dart`).
 
+### Line breaks
+- `RenderParagraph` in 3.50 has no `getLineBoundary` and no `computeLineMetrics` (those are on
+  `TextPainter`, which it keeps private). It has `getBoxesForSelection`, so Galley compares the
+  boxes of two adjacent characters: on different lines means a break between them. Found by
+  compiling against it, 2026-11-25.
+- The line breaker breaks inside a word only when the word alone is wider than the line. In the
+  test font every glyph is a square as wide as the font size, so a width in glyphs says exactly
+  where it breaks (`test/words_test.dart`).
+
 ### Material
 - `package:flutter/material.dart` is deprecated in 3.50 in favor of `package:material_ui`.
   Galley's own tests import `package:material_ui/material_ui.dart`; the library does not import

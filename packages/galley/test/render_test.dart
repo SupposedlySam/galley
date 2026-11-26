@@ -245,6 +245,32 @@ void main() {
     expect(fonts.single.message, startsWith('1 text span(s) ask for "NotAFont"'));
   });
 
+  testWidgets('a label too wide for a small phone at 2.0× breaks mid-word, and says so', (
+    tester,
+  ) async {
+    final host = ToyHost(
+      screens: {
+        '/label': (_) => const Scaffold(
+          body: Row(
+            children: [
+              Expanded(child: Text('COMPLIMENTARY')),
+              Expanded(child: Text('two short words')),
+            ],
+          ),
+        ),
+      },
+    );
+    final small = await render(tester, host, _frame('/label', device: 'small-phone', scale: '2.0'));
+    final broken = small.findings.where((f) => f.kind == 'broken-word').toList();
+    expect(broken, hasLength(1), reason: '${small.findings}');
+    expect(broken.single.message, contains('COMPLIMEN'));
+    expect(broken.single.message, isNot(contains('short')), reason: 'it wrapped at spaces');
+
+    // The same screen at 1.0× fits, so the finding is the scale's doing.
+    final fits = await render(tester, host, _frame('/label', device: 'small-phone'));
+    expect(fits.findings.map((f) => f.kind), isNot(contains('broken-word')));
+  });
+
   testWidgets('pixels the app never paints are a finding; a Scaffold paints them all', (
     tester,
   ) async {

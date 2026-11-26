@@ -218,7 +218,7 @@ GitHub repo. Before pub.dev, an app pins a tag:
 ```yaml
 dev_dependencies:
   galley:
-    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.1.3}
+    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.2.0}
 ```
 
 - **Why not a path dependency:** CI and fresh clones have no sibling checkout, so `pub get`
@@ -269,6 +269,7 @@ the landing, records the tree and captures pixels. Whatever it had to work aroun
 | `default-font` | text names no family; a device would use its own font |
 | `network-image` | a `NetworkImage` was drawn as a gray placeholder; the URLs are listed |
 | `unpainted` | some pixels are not opaque; a device shows its window background there |
+| `broken-word` | a line break falls between two letters: a word did not fit its line |
 
 - **Errors are not findings.** A throw from mount, build or arrive, any `FlutterError`, a
   landing on another uri, or two renders that differ makes the frame an error. Each frame is
@@ -279,6 +280,11 @@ the landing, records the tree and captures pixels. Whatever it had to work aroun
 - **Each render gets a new `KeyedSubtree(UniqueKey())`.** Without it the second render reuses
   the first one's State (its router, its controllers), shows the first one's end state, and the
   determinism check compares a frame with itself. Observed in Galley's own `arrive` test.
+- **A word broken across lines is a finding, not an error.** The frame drew everything, and
+  whether "PLAC" over "ED" is acceptable is the reviewer's call. It is read from the laid-out
+  character boxes, so it judges what was drawn. A break after a soft hyphen is the author's and
+  is not reported. Asked for by the first adopting app, whose 2.0× small-phone frames broke
+  several labels and carried no finding.
 - **Unpainted pixels are reported, not filled.** Rejected: compositing over black or white. A
   real device's window background depends on its theme, and a guessed color would hide that
   the app paints nothing there.

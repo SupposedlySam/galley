@@ -8,6 +8,7 @@ import 'capture.dart';
 import 'fonts.dart';
 import 'host.dart';
 import 'network.dart';
+import 'words.dart';
 
 /// One render of one frame: what was on screen and what went wrong on the way.
 final class RenderOutcome {
@@ -136,7 +137,10 @@ final class FrameRenderer {
 
       final tree = recorder.record(tester);
       final pixels = await FramePixels.capture(tester);
-      findings.addAll(fonts.missingIn(tester.binding.renderViews.single));
+      final view = tester.binding.renderViews.single;
+      findings
+        ..addAll(fonts.missingIn(view))
+        ..addAll(brokenWordsIn(view));
       final unpainted = pixels.unpainted;
       if (unpainted > 0) {
         findings.add(

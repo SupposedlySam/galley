@@ -4,7 +4,7 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.1.3, the renderer.** Galley renders and records a round of frames from inside an
+**Status: 0.2.0, the renderer.** Galley renders and records a round of frames from inside an
 app's own `flutter test`. The canvas, server and CLI that reviewers use are not built yet
 ([what is planned](docs/DESIGN.md#d1--packages-split-by-what-they-may-depend-on-2026-11-25)).
 
@@ -23,7 +23,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.1.3
+      ref: v0.2.0
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -68,7 +68,27 @@ flutter test test/galley_test.dart --dart-define=GALLEY_OUT=build/galley/round-1
 ```
 
 Without `GALLEY_OUT` the same file is a CI check: every frame is its own test, and a frame
-that errs fails it.
+that errs fails it. Either way, the run ends with one line saying how many frames rendered and
+where they went.
+
+A round takes a while, so an app may keep it out of a plain `flutter test`. Tag the file and
+skip the tag in `dart_test.yaml`:
+
+```dart
+@Tags(['galley'])
+library;
+```
+
+```yaml
+# dart_test.yaml
+tags:
+  galley:
+    skip: "a Galley round; run with --run-skipped"
+```
+
+Then `flutter test --run-skipped test/galley_test.dart` runs it. Galley does not skip itself
+when `GALLEY_OUT` is unset, because that is how it runs as a CI check, and an unset value must
+not quietly turn the check off.
 
 ## What a round contains
 
