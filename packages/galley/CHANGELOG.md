@@ -4,6 +4,11 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.1
+
+- The round's `index.json` is written through galley_core's `RoundManifest`. Its content is
+  unchanged.
+
 ## 0.3.0
 
 - New finding, `broken-word-unseen`: a word broken across lines in text that was laid out but is

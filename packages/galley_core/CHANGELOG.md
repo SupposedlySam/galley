@@ -4,6 +4,15 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.1
+
+- New: carrying marks into a round (`Round`, `RoundFrame`, `Carried`, `Placement`). Every mark
+  gets one placement per round: Raised; Reanchored, with an Exact, Moved or Lost result;
+  Unplaced, when its frame errored or has no tree; or Retired, when its frame is gone. The next
+  round looks for the widget where it was last found, and the mark keeps its anchor as raised.
+- New: `RoundManifest`, the `index.json` a round is listed by. It reads every index the packer
+  has written since 0.1.0.
+
 ## 0.3.0
 
 - No changes. Released with galley 0.3.0.

@@ -8,6 +8,7 @@ verify the answers. Rounds stack, and nothing is erased.
 - [README.md](README.md): what exists today and how an app adopts it.
 - [docs/DESIGN.md](docs/DESIGN.md): the principles, the decisions, and what each one rejected.
 - [docs/BOUNDARY.md](docs/BOUNDARY.md): what we assume about Flutter, with citations.
+- [docs/ROADMAP.md](docs/ROADMAP.md): the steps to the first reviewed round, in order.
 - [docs/READINGS.md](docs/READINGS.md): when each doc was last read whole. Update it when you
   read one.
 

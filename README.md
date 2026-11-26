@@ -4,9 +4,9 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.0, the renderer.** Galley renders and records a round of frames from inside an
-app's own `flutter test`. The canvas, server and CLI that reviewers use are not built yet
-([what is planned](docs/DESIGN.md#d1--packages-split-by-what-they-may-depend-on-2026-11-25)).
+**Status: 0.3.1, the renderer.** Galley renders and records a round of frames from inside an
+app's own `flutter test`, and its core carries marks from one round into the next. The canvas,
+server and CLI that reviewers use are not built yet ([the plan](docs/ROADMAP.md)).
 
 | Package | What it is |
 |---|---|
@@ -23,7 +23,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.0
+      ref: v0.3.1
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -111,6 +111,7 @@ the app never painted, a word broken across lines, inside the picture or out of 
 
 - [docs/DESIGN.md](docs/DESIGN.md): the principles, every decision, and what each rejected.
 - [docs/BOUNDARY.md](docs/BOUNDARY.md): what Galley assumes about Flutter, with citations.
+- [docs/ROADMAP.md](docs/ROADMAP.md): the steps to the first reviewed round, each one checkable.
 - [llms.txt](llms.txt): the same, for an agent.
 
 ## Developing
