@@ -4,7 +4,7 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.1, the renderer.** Galley renders and records a round of frames from inside an
+**Status: 0.3.2, the renderer.** Galley renders and records a round of frames from inside an
 app's own `flutter test`, and its core carries marks from one round into the next. The canvas,
 server and CLI that reviewers use are not built yet ([the plan](docs/ROADMAP.md)).
 
@@ -23,7 +23,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.1
+      ref: v0.3.2
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -92,7 +92,8 @@ not quietly turn the check off.
 
 ## What a round contains
 
-`GALLEY_OUT` gets `index.json` and, per frame, a PNG, a JSON tree of the app's widgets (type,
+`GALLEY_OUT` gets `index.json`, `round.json` (the commit, whether the tree had uncommitted
+changes, the Flutter version and the time) and, per frame, a PNG, a JSON tree of the app's widgets (type,
 key, rect, source location, semantics label) and a JSON record.
 
 Galley picks the frames itself. Each screen is shown on the reference value of every axis, and

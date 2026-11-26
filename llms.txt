@@ -1,8 +1,8 @@
 # Galley
 
 > Galley renders every screen × state × device of a Flutter app as a frame, from inside the
-> app's own `flutter test`, for design review. Version 0.3.1 is the renderer: it writes a round
-> of PNGs, widget trees and frame records to disk, and its core carries marks from one round
+> app's own `flutter test`, for design review. Version 0.3.2 is the renderer: it writes a round
+> of PNGs, widget trees, frame records and the round's provenance to disk, and its core carries marks from one round
 > into the next. The review canvas, server and CLI are not built yet (docs/ROADMAP.md).
 
 An app adopts Galley by writing one `GalleyHost` subclass in `test/` and calling
@@ -22,7 +22,7 @@ reported as nothing.
 ## Docs
 
 - [README](README.md): adopting Galley, the host, running a round, what a round contains
-- [Design decisions](docs/DESIGN.md): principles and decisions D1–D10, with what each rejected
+- [Design decisions](docs/DESIGN.md): principles and decisions D1–D11, with what each rejected
 - [Boundary](docs/BOUNDARY.md): what Galley assumes about Flutter 3.50, with citations
 
 ## Packages

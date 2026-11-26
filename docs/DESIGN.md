@@ -240,7 +240,7 @@ GitHub repo. Before pub.dev, an app pins a tag:
 ```yaml
 dev_dependencies:
   galley:
-    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.1}
+    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.2}
 ```
 
 - **Why not a path dependency:** CI and fresh clones have no sibling checkout, so `pub get`
@@ -324,3 +324,27 @@ the landing, records the tree and captures pixels. Whatever it had to work aroun
 - **The record** (`galley_core/lib/src/record.dart`) is one JSON file per frame. Its status is
   `rendered`, `frozen` or `error`, and the constructor refuses an error with no errors or errors
   on a non-error. A landing is a uri or an unknown with a reason, never both and never neither.
+
+## D11 · A round records where it came from (2026-11-26)
+
+`round.json` holds the app's commit, whether its tree had changes not in that commit, the
+Flutter version and the time (`galley_core/lib/src/provenance.dart`). An answer says "fixed in
+this commit", and a round that names its commit is how a reviewer knows the fix is in the frame.
+
+- **Each fact is Known or Unrecorded with a reason.** Rejected: an empty string or `null` for a
+  commit that could not be read. That looks the same as a writer that forgot, and a dirty
+  `false` would look like a clean tree.
+- **Read before anything is written.** A round written inside the checkout to a directory git
+  does not ignore would otherwise make its own tree look dirty.
+- **Untracked files make the tree dirty; ignored ones do not.** A new file the app imports
+  changes what renders. A build directory does not.
+- **The Flutter version is read from `$FLUTTER_ROOT/bin/cache/flutter.version.json`**, which
+  `flutter test` sets for the test process. Rejected: running `flutter --version`. It takes
+  seconds, it can run a different Flutter from the one running the test, and it can update
+  itself.
+- **A round outside git still packs.** Its frames are worth reviewing, and the reviewer is told
+  the commit is unknown.
+- *Mutation, 2026-11-26:* 9 of 9 mutants of the reader and the packer's write are killed,
+  against real git in temp checkouts. Not tested: git exiting 0 with something that is not a
+  SHA, which real git cannot be made to do. The guard is there so that a round would say so
+  rather than fail.

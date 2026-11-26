@@ -4,6 +4,12 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.2
+
+- The round now has a `round.json`: the commit the app was rendered from, whether its tree had
+  uncommitted changes, the Flutter version and the time. Outside git, the commit and tree state
+  are written as unknown with git's reason, and the round still packs.
+
 ## 0.3.1
 
 - The round's `index.json` is written through galley_core's `RoundManifest`. Its content is

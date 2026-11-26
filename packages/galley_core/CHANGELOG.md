@@ -4,6 +4,13 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.2
+
+- New: `RoundProvenance`, a round's `round.json`: the commit, whether the tree was dirty, the
+  Flutter version and the time. Each fact is `Known` or `Unrecorded` with a reason, never blank.
+- New: `Placement` and `Carried` read and write JSON. A carried mark is stored by its id.
+- New: `isCommitSha`, the rule marks and rounds share for a commit.
+
 ## 0.3.1
 
 - New: carrying marks into a round (`Round`, `RoundFrame`, `Carried`, `Placement`). Every mark
