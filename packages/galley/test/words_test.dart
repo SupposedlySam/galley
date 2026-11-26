@@ -187,6 +187,48 @@ void main() {
     expect(byKind['broken-word-unseen'], isNot(contains('"FILL|ED1"')));
   });
 
+  testWidgets('a break scrolled sideways out of a horizontal list is not in the picture', (
+    tester,
+  ) async {
+    // A list 200 wide: card 0 (0-100) is in it, card 2 (200-300) is past its right edge and
+    // still on the 800-wide screen, under the list's clip.
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 200,
+            height: 100,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (var i = 0; i < 4; i++)
+                  SizedBox(
+                    width: 100,
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: SizedBox(
+                        width: 4 * 14,
+                        child: Text(i == 0 ? 'PLACED' : 'FILLED$i', style: _style),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('FILLED2', skipOffstage: false), findsOneWidget, reason: 'laid out');
+    final byKind = {
+      for (final f in brokenWordsIn(tester.binding.renderViews.single)) f.kind: f.message,
+    };
+    expect(byKind['broken-word'], startsWith('2 line break(s)'));
+    expect(byKind['broken-word'], allOf(contains('"PLAC|ED"'), contains('"FILL|ED1"')));
+    expect(byKind['broken-word-unseen'], contains('"FILL|ED2"'));
+  });
+
   testWidgets('a single-line frame has no finding', (tester) async {
     final root = await _layout(tester, 400, [const Text('PLACED', style: _style)]);
     expect(brokenWordsIn(root), isEmpty);
