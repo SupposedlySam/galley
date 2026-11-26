@@ -11,8 +11,10 @@ import 'package:galley_core/galley_core.dart';
 void main() {
   late Directory out;
   late ProcessResult run;
+  late DateTime started;
 
   setUpAll(() async {
+    started = DateTime.now().toUtc();
     out = Directory.systemTemp.createTempSync('galley_round_');
     final flutter = '${Platform.environment['FLUTTER_ROOT']}/bin/flutter';
     run = await Process.run(flutter, [
@@ -26,6 +28,19 @@ void main() {
 
   FrameRecord record(String path) =>
       FrameRecord.fromJson(jsonDecode(File('${out.path}/$path').readAsStringSync()), path);
+
+  test('round.json names the commit, the tree state and the Flutter that rendered it', () {
+    final round = RoundProvenance.fromJson(
+      jsonDecode(File('${out.path}/round.json').readAsStringSync()),
+      'round.json',
+    );
+    final head = Process.runSync('git', ['rev-parse', 'HEAD']);
+    expect((round.commit as Known<String>).value, '${head.stdout}'.trim());
+    final status = Process.runSync('git', ['status', '--porcelain']);
+    expect((round.dirty as Known<bool>).value, '${status.stdout}'.trim().isNotEmpty);
+    expect((round.flutter as Known<String>).value, matches(RegExp(r'^\d+\.\d+\.\d+')));
+    expect(round.at.isAfter(started), isTrue, reason: '${round.at} vs $started');
+  });
 
   test('every planned frame has a record, and the index lists exactly those', () {
     final index = _index(out);

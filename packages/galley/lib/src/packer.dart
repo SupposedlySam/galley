@@ -10,6 +10,7 @@ import 'capture.dart';
 import 'fonts.dart';
 import 'frames.dart';
 import 'host.dart';
+import 'provenance_reader.dart';
 import 'render.dart';
 
 /// Declares one test per frame of [host], and writes the round when `GALLEY_OUT` is set.
@@ -32,8 +33,15 @@ void galley(GalleyHost host) {
   final out = _outDir();
   final records = <FrameRecord>[];
   late FrameRenderer renderer;
+  late RoundProvenance provenance;
 
   setUpAll(() async {
+    // Before anything is written (see readProvenance).
+    provenance = readProvenance(
+      dir: Directory.current.path,
+      environment: Platform.environment,
+      now: DateTime.now(),
+    );
     final fonts = await GalleyFonts.load();
     final cwd = Directory.current.path;
     renderer = FrameRenderer(
@@ -60,8 +68,7 @@ void galley(GalleyHost host) {
       }
       records.add(record);
       if (out != null) {
-        File('${out.path}/records/${fileName(frame.key)}.json')
-            .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(record.toJson()));
+        _writeJson('${out.path}/records/${fileName(frame.key)}.json', record.toJson());
       }
       if (record.status == FrameStatus.error) fail(headline(record));
     });
@@ -79,16 +86,19 @@ void galley(GalleyHost host) {
       ),
     );
     if (out == null) return;
-    File('${out.path}/index.json').writeAsStringSync(
-      const JsonEncoder.withIndent('  ').convert(
-        RoundManifest(
-          frames: [for (final r in records) 'records/${fileName(r.key)}.json'],
-          planned: frames.length,
-        ).toJson(),
-      ),
+    _writeJson('${out.path}/round.json', provenance.toJson());
+    _writeJson(
+      '${out.path}/index.json',
+      RoundManifest(
+        frames: [for (final r in records) 'records/${fileName(r.key)}.json'],
+        planned: frames.length,
+      ).toJson(),
     );
   });
 }
+
+void _writeJson(String path, JsonMap json) =>
+    File(path).writeAsStringSync(const JsonEncoder.withIndent('  ').convert(json));
 
 Future<FrameRecord> _renderTwice(
   WidgetTester tester,
