@@ -197,6 +197,28 @@ frame missing from the new round is **retired**, with its history kept. Nothing 
 - **A mark's status is a fold over an append-only event log** (answered, verified, reopened).
   An illegal sequence is refused when it is written and again when it is read.
 
+*Carry-forward as built (`galley_core/lib/src/round.dart`, 2026-11-26):*
+- **Every mark gets one placement per round**, verified marks included:
+  - **Raised:** new in this round.
+  - **Reanchored:** looked up, and the result is Exact, Moved or Lost.
+  - **Unplaced:** cannot be judged.
+  - **Retired:** the frame is not in the round.
+- **An error frame, or one with no tree, is Unplaced, never Lost.** Lost is a claim about the
+  app. A frame that landed on the login screen would make every mark on it Lost for a reason
+  that is not theirs. A frozen frame is placed, because its picture and tree are real.
+- **The next round looks for the widget as it was last found**, not as raised. The mark keeps
+  its anchor as raised. Moved then means "moved since the last round", and clears once the
+  widget stays put.
+  - **Rejected:** always looking from the raised anchor. A widget that moved once would be
+    Moved in every later round, and its call site would go stale with every edit above it.
+  - A mark that is not found keeps the anchor it was last found at, so a frame that comes back
+    finds it again.
+- **Pure.** The caller reads the records and trees (`RoundFrame`), so the CLI, the server and
+  the tests carry marks the same way. `RoundManifest` is the `index.json` the packer writes and
+  everything else reads.
+- *Mutation, 2026-11-26:* 12 of 12 mutants are killed. One survived the first suite: keeping
+  the raised anchor for a mark that was not placed. A test was added for it.
+
 ## D7 · Server: decided when it is built, against these constraints (2026-11-25)
 
 Reviewers are outside the app's team, so the server needs:
@@ -218,7 +240,7 @@ GitHub repo. Before pub.dev, an app pins a tag:
 ```yaml
 dev_dependencies:
   galley:
-    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.0}
+    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.1}
 ```
 
 - **Why not a path dependency:** CI and fresh clones have no sibling checkout, so `pub get`

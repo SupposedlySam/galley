@@ -11,5 +11,6 @@ export 'src/json.dart' show JsonMap, JsonReader;
 export 'src/mark.dart';
 export 'src/plan.dart';
 export 'src/reanchor.dart';
+export 'src/round.dart';
 export 'src/record.dart';
 export 'src/source_location.dart';

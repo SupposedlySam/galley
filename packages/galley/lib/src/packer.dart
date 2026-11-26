@@ -80,10 +80,12 @@ void galley(GalleyHost host) {
     );
     if (out == null) return;
     File('${out.path}/index.json').writeAsStringSync(
-      const JsonEncoder.withIndent('  ').convert({
-        'frames': [for (final r in records) 'records/${fileName(r.key)}.json'],
-        'planned': frames.length,
-      }),
+      const JsonEncoder.withIndent('  ').convert(
+        RoundManifest(
+          frames: [for (final r in records) 'records/${fileName(r.key)}.json'],
+          planned: frames.length,
+        ).toJson(),
+      ),
     );
   });
 }

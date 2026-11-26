@@ -28,12 +28,13 @@ void main() {
       FrameRecord.fromJson(jsonDecode(File('${out.path}/$path').readAsStringSync()), path);
 
   test('every planned frame has a record, and the index lists exactly those', () {
-    final index = jsonDecode(File('${out.path}/index.json').readAsStringSync()) as Map;
-    final listed = (index['frames'] as List).cast<String>();
+    final index = _index(out);
+    final listed = index.frames;
     // 3 subjects on 2 devices, the other axes single-valued: 3 essential frames plus pairwise
     // cover of subject × device adds the 3 on the small phone. 6 in all.
-    expect(index['planned'], 6);
+    expect(index.planned, 6);
     expect(listed, hasLength(6));
+    expect(index.missing, 0);
     final onDisk = Directory('${out.path}/records').listSync().map((f) => f.uri.pathSegments.last);
     expect(onDisk.map((f) => 'records/$f'), unorderedEquals(listed));
   });
@@ -107,7 +108,10 @@ void main() {
   });
 }
 
-List<String> _listed(Directory out) {
-  final index = jsonDecode(File('${out.path}/index.json').readAsStringSync()) as Map;
-  return (index['frames'] as List).cast<String>();
-}
+/// The round's index, read the way the CLI and the server read it.
+RoundManifest _index(Directory out) => RoundManifest.fromJson(
+  jsonDecode(File('${out.path}/index.json').readAsStringSync()),
+  'index.json',
+);
+
+List<String> _listed(Directory out) => _index(out).frames;
