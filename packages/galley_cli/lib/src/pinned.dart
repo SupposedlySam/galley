@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import 'archive.dart';
+import 'modes.dart';
 
 // What a galley fetches and keeps (docs/DESIGN.md D14, D15): the canvas build for `serve`, and
 // PocketBase for `host`. Each is a release asset pinned by URL and SHA-256 in this package,
@@ -134,7 +135,9 @@ final class ArchiveCache {
           File(at)
             ..parent.createSync(recursive: true)
             ..writeAsBytesSync(bytes);
-          if (e.executable) _makeExecutable(at);
+          // The owner's alone, as chmod 700. Rejected: the archive's own mode bits. A
+          // world-writable mode in an archive would be kept, and the cache is the user's.
+          if (e.executable) setMode(at, 0x1c0);
         } else {
           Directory(at).createSync(recursive: true);
         }
@@ -161,20 +164,6 @@ String _stem(String asset) => asset.endsWith('.tar.gz')
     : asset.endsWith('.zip')
     ? asset.substring(0, asset.length - '.zip'.length)
     : asset;
-
-/// Lets [path]'s owner, and only its owner, run it, as `chmod 700`. Nothing on Windows, which
-/// runs a file by its name.
-///
-/// dart:io writes a file but cannot set its mode, so this runs `chmod`, which POSIX requires
-/// every system to have. Rejected: the archive's own mode bits. A world-writable mode in an
-/// archive would be kept; the cache is the user's own, and is kept as theirs.
-void _makeExecutable(String path) {
-  if (Platform.isWindows) return;
-  final r = Process.runSync('chmod', ['700', path]);
-  if (r.exitCode != 0) {
-    throw FileSystemException('chmod 700 failed: ${'${r.stderr}'.trim()}', path);
-  }
-}
 
 /// Downloads [url] with dart:io, following redirects (a release asset redirects to its
 /// storage), refusing anything but a 200 and any body over [max] bytes.

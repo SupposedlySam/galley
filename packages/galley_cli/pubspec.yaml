@@ -22,6 +22,10 @@ dependencies:
   # runs the app's own `flutter test` as a child process.
   galley_core:
     path: ../galley_core
+  # `galley host` runs galley_server's schema and hooks, and compiles its validator, from the
+  # source this CLI resolves (docs/DESIGN.md D15).
+  galley_server:
+    path: ../galley_server
 
 dev_dependencies:
   lints: ^6.0.0

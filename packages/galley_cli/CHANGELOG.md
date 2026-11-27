@@ -4,6 +4,25 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.9 (unreleased)
+
+A Galley server on this machine (DESIGN D15):
+- `galley host` runs PocketBase 0.40.6 with `galley_server`'s schema and hooks, on loopback.
+  PocketBase is pinned by each platform's archive SHA-256 (`PinnedPocketBase`) and fetched once
+  into the galley cache, like the canvas. The validator the hooks call is compiled from the
+  source this CLI resolved, into the cache, keyed by a hash of that source and of the Dart that
+  compiled it. Its data is kept under `galley/host` in the platform's user data directory
+  (`dataDirectory`), or `--data`, readable by its owner only. Sign-in codes are written to its
+  `otp` directory, not mailed. `--owner <email>` makes the user who makes a galley.
+- `LocalServer` is that server, for tests and tools: `start`, `ensureUser`, `close`.
+- The canvas cache is now a cache of any pinned archive: `ArchiveCache` and `PinnedArchive`.
+  `CanvasCache` is a thin adapter over it. Zips are read by `readZip`, which unpacks files and
+  directories only, and keeps the owner execute bit.
+- The server's rules are tested here, through `LocalServer`: one galley's members never see or
+  write another's, an invite lets its invitee in once as a reviewer, a revoked reviewer loses
+  access and keeps their membership, nothing is deleted, every write is judged (a manifest past
+  128 KiB included), and sign-in attempts are rate limited. The first run fetches PocketBase.
+
 ## 0.3.8
 
 The canvas, served:

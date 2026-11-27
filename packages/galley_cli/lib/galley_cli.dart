@@ -7,6 +7,7 @@ export 'src/canvas.dart';
 export 'src/cli.dart' show GalleyContext, runGalley;
 export 'src/galley_directory.dart' show GalleyDirectory;
 export 'src/galley_server.dart';
+export 'src/host.dart' show LocalServer, dataDirectory;
 export 'src/local_galley.dart';
 export 'src/pinned.dart';
 export 'src/pocketbase.dart';

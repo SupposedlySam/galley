@@ -10,6 +10,7 @@ import 'canvas.dart';
 import 'pinned.dart';
 import 'galley_directory.dart';
 import 'galley_server.dart';
+import 'host.dart';
 import 'local_galley.dart';
 import 'renderer.dart';
 
@@ -89,7 +90,8 @@ Future<int> runGalley(List<String> args, [GalleyContext? context]) async {
     ..addCommand(_Verify(c))
     ..addCommand(_Reopen(c))
     ..addCommand(_Withdraw(c))
-    ..addCommand(_Serve(c));
+    ..addCommand(_Serve(c))
+    ..addCommand(_Host(c));
   try {
     return await runner.run(args) ?? 0;
   } on UsageException catch (e) {
@@ -520,5 +522,87 @@ final class _Serve extends _GalleyCommand {
       c.out.writeln('Fetching the canvas, ${pin.asset}, into $root (once)');
     }
     return cache.canvas(pin);
+  }
+}
+
+final class _Host extends _GalleyCommand {
+  _Host(super.c) {
+    argParser
+      ..addOption(
+        'port',
+        defaultsTo: '$defaultPort',
+        help: 'The loopback port. 0 picks a free one.',
+        valueHelp: 'n',
+      )
+      ..addOption(
+        'data',
+        help: 'Where its galleys are kept. Defaults to galley/host under the user data directory.',
+        valueHelp: 'dir',
+      )
+      ..addOption(
+        'owner',
+        help: 'Make a user for this email, who can then make a galley and invite to it.',
+        valueHelp: 'email',
+      );
+  }
+
+  /// PocketBase's own default, and not `serve`'s, so the two can run at once.
+  static const defaultPort = 8090;
+
+  @override
+  String get name => 'host';
+
+  @override
+  String get description =>
+      'Run a Galley server on this machine: PocketBase with Galley\'s schema, on loopback. '
+      'Sign-in codes are written to its data directory, not mailed. Stops on Ctrl-C.';
+
+  @override
+  Future<int> run() async {
+    final port = int.tryParse(_args.option('port')!);
+    if (port == null || port < 0 || port > 65535) {
+      throw UsageException('--port is 0 to 65535', usage);
+    }
+    final cache = cacheDirectory(c.environment);
+    if (cache == null) {
+      throw const Refused.environment(
+        'there is nowhere to cache PocketBase: set GALLEY_CACHE, or HOME',
+      );
+    }
+    final data =
+        _args.option('data') ??
+        switch (dataDirectory(c.environment)) {
+          final d? => '$d/host',
+          null => throw const Refused.environment(
+            'there is nowhere to keep its data: give --data <dir>',
+          ),
+        };
+    c.out.writeln(
+      'Starting PocketBase with Galley\'s schema (the first start fetches it into $cache)',
+    );
+    final server = await LocalServer.start(
+      data: data,
+      cache: ArchiveCache(cache, fetch: c.fetch),
+      port: port,
+    );
+    try {
+      if (_args.option('owner') case final owner?) {
+        await server.ensureUser(owner);
+        c.out.writeln('${owner.toLowerCase()} can sign in');
+      }
+      c.out
+        ..writeln('Hosting $data at ${server.url}  (Ctrl-C stops it)')
+        ..writeln('Sign-in codes are written to ${server.otpDirectory}');
+      final stopped = await Future.any([
+        c.untilStopped().then((_) => null),
+        server.exitCode.then<int?>((code) => code),
+      ]);
+      if (stopped != null) {
+        throw Refused.environment('PocketBase stopped by itself, with exit code $stopped');
+      }
+      return 0;
+    } finally {
+      await server.close();
+    }
   }
 }
