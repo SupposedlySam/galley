@@ -767,3 +767,44 @@ packages/galley_server/   what speaks the server's language. Depends on galley_c
 - **The owner may verify their own answer.** The core allows it, and the server does not
   narrow it, because the first adopting app's owner is also one of its reviewers. Narrowing it
   is a rule for the validator, if a galley ever needs it.
+
+## D16 · The reviewer's side: what waits on them, and the widget as they marked it (2026-11-27)
+
+A reviewer comes back to check answers, not to read every mark. The canvas lists, above the
+marks, the ones they raised that were answered, the one answered longest ago first
+(`CanvasModel.queue`). Saying "Looks right" (verify) or "Not yet" (reopen) on one opens the next;
+the last opens the list. An answered mark's thread shows the widget as they marked it beside
+the same widget now (`compare.dart`).
+
+- **Only their own marks.** Anyone may verify an answer (`MarkEvent.apply`), but the person who
+  raised a mark is the one who knows what they meant. Rejected: every answered mark, which in a
+  galley of three reviewers puts two thirds of the queue in front of someone who cannot say.
+  A reviewer who has not named themselves has no queue, so a hand-written mark naming nobody
+  is no one's.
+- **The oldest answer first**, by the time of its last `Answered` event, which the galley sets
+  (D13). Rejected: the order marks are listed in, newest raised first, which leaves the answer
+  waiting longest at the bottom.
+- **"Before" is the frame of the round the mark was raised on, and "now" the round shown**, each
+  cropped around the widget with a margin of 24 logical pixels, so a change to padding shows in
+  the gap to the next widget. At the panel's width a whole phone screen is too small to see it.
+  Rejected: an overlay of the two rounds on the board (Not on this path, ROADMAP), which hides
+  the board the reviewer uses to find the next mark.
+- **The round raised on is a field of a mark's placement, `PlacedMark.raisedIn`**, and `pull
+  --json` gives it as `raised_in`. On a server it is the mark row's round. Locally it is the
+  first round whose placements record the mark as raised, since `Round.carry` never writes
+  Raised and only a raise does. Null when nothing records it (a hand-written mark, work items
+  written before 0.3.10), and the canvas then says so. Rejected: working it out from the mark's
+  time against each round's, since the clocks that set them may disagree; and a field of
+  `Mark`, which is the reviewer's words and the history, not where a galley put it.
+- **Each round is read once.** The round shown is not read again, and an older one is kept
+  after its first read for every mark raised on it. A read that is refused or does not parse is
+  not kept, so the next look tries again.
+- **What cannot be shown is said**, never drawn as an empty box: the round raised on is not
+  recorded, the frame is not in it, no image was captured, the mark is not drawn in the round
+  shown (with why), or the image did not load.
+- *Mutation, 2026-11-27:* 16 mutants of the queue, the next mark, the read of a round and the
+  crop. One survived (the queue of a reviewer with no name) until a test reached it with a mark
+  naming nobody; all are killed.
+- **Not built:** "frames new or changed since your last visit". It needs a digest of each frame
+  (the server's manifest has one per file) and the time of each reviewer's last visit, stored
+  per member. Not checked yet: the crops in a real browser.
