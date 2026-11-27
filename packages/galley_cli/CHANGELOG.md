@@ -4,6 +4,17 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.6
+
+Fixes from the first app to call `galley serve`:
+- A refusal says what kind it is, and the server answers it as such: 422 for a well-formed
+  request that cannot be (a blank note, a frame the round lacks, a commit that is not one),
+  404 for a mark that is not there, and 409 only for an event the mark's status does not allow.
+  0.3.5 answered all of them 409. `Refused` now has four constructors, one per `RefusalKind`.
+- `POST /api/marks` takes the frame as its key string, the form a mark's JSON carries, as well
+  as an object of axes.
+- The server answers on `::1` as well as `127.0.0.1`, at the same port.
+
 ## 0.3.5
 
 - `galley serve`: the galley over HTTP on loopback, for the canvas (DESIGN D13). It serves the
