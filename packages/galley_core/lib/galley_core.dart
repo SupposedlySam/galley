@@ -20,3 +20,4 @@ export 'src/round.dart';
 export 'src/record.dart';
 export 'src/source_location.dart';
 export 'src/stored_round.dart';
+export 'src/write_rules.dart';

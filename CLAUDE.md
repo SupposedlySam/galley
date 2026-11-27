@@ -34,5 +34,6 @@ dart format -l 100 packages
 (cd packages/galley_core && dart analyze && dart test)
 (cd packages/galley && flutter analyze && flutter test)
 (cd packages/galley_cli && dart analyze && dart test)
+(cd packages/galley_server && dart analyze && dart test)
 (cd packages/galley_web && flutter analyze && flutter test)
 ```

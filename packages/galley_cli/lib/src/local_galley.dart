@@ -68,7 +68,7 @@ final class LocalGalley implements Galley {
     } on PinMissed catch (e) {
       throw Refused.invalid('${e.message} in frame $frame');
     }
-    if (note.trim().isEmpty) throw const Refused.invalid('a mark says what is wrong');
+    if (markNoteRefusal(note) case final why?) throw Refused.invalid(why);
     if (by.trim().isEmpty) throw const Refused.invalid('a mark says who raised it');
 
     final mark = Mark(
@@ -92,9 +92,11 @@ final class LocalGalley implements Galley {
   Future<Mark> record(String id, MarkEvent Function(DateTime at) event) async {
     final mark = directory.mark(id);
     if (mark == null) throw Refused.missing('no mark "$id" in ${directory.path}');
+    final e = event(now().toUtc());
+    if (eventRefusal(e) case final why?) throw Refused.invalid(why);
     final Mark next;
     try {
-      next = mark.record(event(now().toUtc()));
+      next = mark.record(e);
     } on StateError catch (e) {
       // The core says why, in the event's own words: a status that does not allow it, or a
       // withdrawal by someone who did not raise the mark.

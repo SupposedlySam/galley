@@ -1,0 +1,24 @@
+name: galley_server
+description: "What speaks a Galley server's language: its schema and hooks, the validator they call, and the client the CLI and the canvas share. Pure Dart."
+version: 0.3.8
+repository: https://github.com/SupposedlySam/galley/tree/main/packages/galley_server
+issue_tracker: https://github.com/SupposedlySam/galley/issues
+topics: [design, review]
+# Until the pub.dev release (docs/DESIGN.md D8), which also replaces the galley_core path below.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+executables:
+  galley_validate: galley_validate
+
+dependencies:
+  # Never Flutter (docs/DESIGN.md D1): the canvas uses this client, and so does the CLI.
+  galley_core:
+    path: ../galley_core
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.0

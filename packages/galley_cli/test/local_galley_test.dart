@@ -82,6 +82,29 @@ void main() {
     expect(g.marks(), isEmpty);
   });
 
+  test('a note past the limit is refused, on a mark or an event, and nothing is written', () async {
+    final long = 'x' * (maxNoteLength + 1);
+    await expectLater(
+      local().raise(frame: drawn, target: const AtNode([0]), note: long, by: 'r'),
+      throwsA(isA<Refused>().having((r) => r.message, 'message', contains('4001 characters'))),
+    );
+    expect(g.marks(), isEmpty);
+
+    final raised = await local().raise(frame: drawn, target: const AtNode([0]), note: 'n', by: 'r');
+    await expectLater(
+      local().record(raised.mark.id, (at) => Withdrawn(long, by: 'r', at: at)),
+      throwsA(
+        isA<Refused>()
+            .having((r) => r.kind, 'kind', RefusalKind.invalid)
+            .having((r) => r.message, 'message', contains("a withdrawal's note")),
+      ),
+    );
+    expect(g.mark(raised.mark.id)!.history, isEmpty);
+    // The same event with a note within the limit is recorded: the limit, not the event, refused.
+    await local().record(raised.mark.id, (at) => Withdrawn('dupe', by: 'r', at: at));
+    expect(g.mark(raised.mark.id)!.status, MarkStatus.withdrawn);
+  });
+
   test('a work item names its image by a clean absolute path, or null when it has none', () async {
     await local().raise(frame: drawn, target: const AtNode([0]), note: 'a', by: 'r');
     await local().raise(frame: blank, target: const AtNode([0]), note: 'b', by: 'r');
