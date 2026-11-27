@@ -7,6 +7,7 @@ import 'package:args/command_runner.dart';
 import 'package:galley_core/galley_core.dart';
 
 import 'canvas.dart';
+import 'pinned.dart';
 import 'galley_directory.dart';
 import 'galley_server.dart';
 import 'local_galley.dart';

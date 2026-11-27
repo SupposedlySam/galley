@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:galley_cli/galley_cli.dart';
+import 'package:test/test.dart';
+
 /// One entry to write: [type] is the ustar typeflag ('0' a file, '5' a directory, '2' a
 /// symlink, 'x' a pax header...).
 typedef Entry = ({String name, String type, List<int> data, String link});
@@ -63,3 +66,25 @@ Uint8List tarOf(List<Entry> entries, {void Function(Uint8List header)? corrupt})
 }
 
 Uint8List gz(Uint8List tar) => Uint8List.fromList(gzip.encode(tar));
+
+/// The files of the tar [archive] that were read, as `path: text`, and directories as
+/// `path/`.
+Map<String, String?> read(Uint8List archive) => readable(readTarGz(archive));
+
+/// [entries] as `path: text`, and directories as `path/`.
+Map<String, String?> readable(List<ArchiveEntry> entries) => {
+  for (final e in entries)
+    if (e.bytes case final b?) e.path: utf8.decode(b) else '${e.path}/': null,
+};
+
+/// What [FormatException] an archive is refused with.
+Matcher refusedWith(Object message) =>
+    throwsA(isA<FormatException>().having((e) => e.message, 'message', message));
+
+/// A canvas build's files, as tar entries.
+final canvasFiles = [
+  dir('./'),
+  file('./index.html', '<html>canvas</html>'),
+  dir('./canvaskit/'),
+  file('./canvaskit/canvaskit.wasm', 'wasm'),
+];
