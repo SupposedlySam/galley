@@ -26,6 +26,8 @@ The reviewer's side of the canvas (ROADMAP step 7):
   What cannot be shown is said: the round raised on is not recorded, the frame is not in it,
   or no image was captured.
 - Verify and reopen read "Looks right" and "Not yet".
+- The queue names a fixing commit by its first 7 characters, as `git log --oneline` does, so
+  the answer's note is not cut off; the thread names it whole.
 
 What changed since your last visit (DESIGN D17):
 - The canvas lists the frames new, changed, gone and not compared since the round you opened

@@ -211,16 +211,26 @@ class MarkList extends StatelessWidget {
   /// Who answered [mark], and how.
   static String _answerLine(Mark mark) {
     final a = mark.history.whereType<Answered>().last;
-    return '${a.by}: ${_answered(a.answer)}${a.answer.note == null ? '' : ' · ${a.answer.note}'}';
+    final how = _answered(a.answer, commit: _short);
+    return '${a.by}: $how${a.answer.note == null ? '' : ' · ${a.answer.note}'}';
   }
+
+  /// A commit as `git log --oneline` names it. Seen in a browser: a whole one filled the
+  /// queue's two lines and cut the answer's note off. The thread names it whole, to be copied.
+  static String _short(String commit) => commit.length > 7 ? commit.substring(0, 7) : commit;
 }
 
-/// How an answer reads in a line: the same words in the queue and in the thread.
-String _answered(Answer answer) => switch (answer.kind) {
-  AnswerKind.fixed => 'fixed in ${answer.commit}',
-  AnswerKind.wontFix => "won't fix",
-  AnswerKind.question => 'a question',
+/// How an answer reads in a line: the same words in the queue and in the thread, the commit
+/// as [commit] gives it (whole, unless given).
+String _answered(Answer answer, {String Function(String) commit = _whole}) => switch (answer) {
+  // Answer.fixed requires the commit; one without is said, never named "null".
+  Answer(kind: AnswerKind.fixed, commit: final c?) => 'fixed in ${commit(c)}',
+  Answer(kind: AnswerKind.fixed) => 'fixed, naming no commit',
+  Answer(kind: AnswerKind.wontFix) => "won't fix",
+  Answer(kind: AnswerKind.question) => 'a question',
 };
+
+String _whole(String commit) => commit;
 
 /// What changed in the round shown since the reviewer last opened one: the frames new,
 /// changed, gone and not compared, each a tap from the board, and how many are the same.

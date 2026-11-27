@@ -777,8 +777,20 @@ packages/galley_server/   what speaks the server's language. Depends on galley_c
   out. Rejected: `sessionStorage`, which forgets the sign-in with the tab, and an HTTP-only
   cookie, which the canvas could not send as the `Authorization` it signs every request
   with. The page runs no script but its own (D14), so a token a script can read is read by
-  the canvas alone. Not checked yet: the entry in a real browser against `galley host`; its
-  steps are tested against a fake server, and the client under it against a real one.
+  the canvas alone. Its steps are tested against a fake server, and the client under it
+  against a real one.
+- *Seen in a real browser, 2026-11-27* (headless Chrome against `galley host`, the toy
+  round): the owner logged in, made and linked a galley, pushed round 1 and invited Rae. In
+  the browser Rae gave the email, the code from the host's `otp/` directory and an alias, and
+  the round opened as "Reviewing as Rae (rae@example.com)" with "Your first visit". Rae
+  raised a mark on the Go button; the owner pulled and answered it and pushed round 2. On a
+  reload Rae was still signed in, saw "1 answer waits on you", both crops loaded from the
+  server's files, and "Looks right" made it verified, which the owner's `pull --all` read.
+  Signing out forgot the session: the next load asked for the email. Seen and fixed: the
+  queue's two lines were filled by a whole commit and the answer's note was cut off; it now
+  names the commit as `git log --oneline` does, and the thread names it whole. Seen and not
+  changed: under `galley host` the page says a code was "mailed" though the host writes it to
+  a file (the page cannot tell, and the host says where).
 - **The owner may verify their own answer.** The core allows it, and the server does not
   narrow it, because the first adopting app's owner is also one of its reviewers. Narrowing it
   is a rule for the validator, if a galley ever needs it.

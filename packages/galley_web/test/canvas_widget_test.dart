@@ -338,6 +338,34 @@ void main() {
       expect(find.text('make it primary'), findsOneWidget, reason: 'the mark is listed');
     });
 
+    testWidgets('names a commit short in the queue, so the note shows, and whole in the thread', (
+      tester,
+    ) async {
+      // Seen in a browser: a whole commit took the queue's two lines and cut the note off.
+      const commit = 'e01c053f7fe6896982f6792f6f54f4425fbe77df';
+      final api = apiOf([
+        buttonMark(
+          'a',
+          _home,
+          history: [
+            Answered(
+              Answer.fixed(commit: commit, note: 'Padding raised to 16'),
+              by: 'Claude',
+              at: t,
+            ),
+          ],
+        ),
+      ]);
+      await openQueued(
+        tester,
+        api,
+        before: () =>
+            expect(find.text('Claude: fixed in e01c053 · Padding raised to 16'), findsOneWidget),
+      );
+      expect(find.text('Claude answered: fixed in $commit'), findsOneWidget);
+      expect(find.textContaining('fixed in e01c053 '), findsNothing, reason: 'the thread');
+    });
+
     testWidgets('compares the widget in the round it was raised on with the round shown', (
       tester,
     ) async {
