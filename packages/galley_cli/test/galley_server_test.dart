@@ -456,7 +456,7 @@ void main() {
       expect(code, 500);
       expect(
         (body! as JsonMap)['error'],
-        'round 1 in ${g.path}/rounds: records/drawn.json is listed and not there',
+        'round 1 in ${g.path}/rounds/1: records/drawn.json is listed and not there',
       );
     });
   });

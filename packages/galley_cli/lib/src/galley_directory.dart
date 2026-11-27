@@ -107,13 +107,17 @@ final class GalleyDirectory {
   }
 
   /// Round [n] as stored.
-  Future<StoredRound> readRound(int n) async {
+  Future<StoredRound> readRound(int n) => readRendered(roundPath(n), 'round $n');
+
+  /// The round rendered at [dir], which [name]s in a refusal: a stored round, or a render a
+  /// push is sending.
+  static Future<StoredRound> readRendered(String dir, String name) async {
     try {
-      return await StoredRound.read(_DirectoryFiles(roundPath(n)));
+      return await StoredRound.read(_DirectoryFiles(dir));
     } on FormatException catch (e) {
-      throw Refused.damaged('round $n: ${e.message}');
+      throw Refused.damaged('$name: ${e.message}');
     } on RoundFileMissing catch (e) {
-      throw Refused.damaged('round $n in $_rounds: ${e.path} is listed and not there');
+      throw Refused.damaged('$name in $dir: ${e.path} is listed and not there');
     }
   }
 

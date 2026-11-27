@@ -26,9 +26,9 @@ dependencies:
   # source this CLI resolves (docs/DESIGN.md D15).
   galley_server:
     path: ../galley_server
+  # The commands of a galley linked to a server speak to it through galley_server's client.
+  http: ^1.6.0
 
 dev_dependencies:
-  # galley_server's client is tested against the server `galley host` runs.
-  http: ^1.6.0
   lints: ^6.0.0
   test: ^1.26.0

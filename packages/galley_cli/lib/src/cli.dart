@@ -5,14 +5,19 @@ import 'dart:math';
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:galley_core/galley_core.dart';
+import 'package:galley_server/galley_server.dart';
+import 'package:http/http.dart' as http;
 
 import 'canvas.dart';
 import 'pinned.dart';
 import 'galley_directory.dart';
 import 'galley_server.dart';
 import 'host.dart';
+import 'linked.dart';
 import 'local_galley.dart';
 import 'renderer.dart';
+
+part 'cli_server.dart';
 
 /// What the commands need from the world, so a test can supply all of it.
 final class GalleyContext {
@@ -27,6 +32,8 @@ final class GalleyContext {
     Future<void> Function()? untilStopped,
     Fetch? fetch,
     PinnedCanvas? canvas,
+    this._client,
+    String? Function()? readLine,
   }) : out = out ?? stdout,
        err = err ?? stderr,
        now = now ?? DateTime.now,
@@ -35,7 +42,8 @@ final class GalleyContext {
        environment = environment ?? Platform.environment,
        untilStopped = untilStopped ?? _untilSignalled,
        fetch = fetch ?? httpFetch,
-       canvas = canvas ?? pinnedCanvas;
+       canvas = canvas ?? pinnedCanvas,
+       readLine = readLine ?? stdin.readLineSync;
 
   /// Where results go.
   final StringSink out;
@@ -64,6 +72,14 @@ final class GalleyContext {
   /// The canvas `serve` serves when it is not given `--web`.
   final PinnedCanvas canvas;
 
+  /// What a galley linked to a server speaks to it through. Made when first needed: a command
+  /// on a galley kept here opens no connection.
+  http.Client get client => _client ??= http.Client();
+  http.Client? _client;
+
+  /// A line the user types: the sign-in code `login` asks for. Null at the end of input.
+  final String? Function() readLine;
+
   static Future<void> _untilSignalled() => Future.any([
     ProcessSignal.sigint.watch().first,
     if (!Platform.isWindows) ProcessSignal.sigterm.watch().first,
@@ -91,7 +107,14 @@ Future<int> runGalley(List<String> args, [GalleyContext? context]) async {
     ..addCommand(_Reopen(c))
     ..addCommand(_Withdraw(c))
     ..addCommand(_Serve(c))
-    ..addCommand(_Host(c));
+    ..addCommand(_Host(c))
+    ..addCommand(_Login(c))
+    ..addCommand(_Link(c))
+    ..addCommand(_Unlink(c))
+    ..addCommand(_Push(c))
+    ..addCommand(_Invite(c))
+    ..addCommand(_Members(c))
+    ..addCommand(_Revoke(c));
   try {
     return await runner.run(args) ?? 0;
   } on UsageException catch (e) {
@@ -142,6 +165,7 @@ abstract class _GalleyCommand extends Command<int> {
     valueHelp: 'name',
   );
 
+  /// Who is doing this, in a galley kept here.
   String get by {
     final by = _args.option('by') ?? c.environment['GALLEY_BY'];
     if (by == null || by.trim().isEmpty) {
@@ -161,13 +185,39 @@ abstract class _GalleyCommand extends Command<int> {
     return rest.first;
   }
 
+  /// The server and galley `.galley/server.json` names, or null when the galley is kept here.
+  ServerLink? get link => ServerLink.read(galley.path);
+
+  Future<_Linked>? _linked;
+
+  /// The galley the commands act on, and who acts: the directory and `--by` (or GALLEY_BY),
+  /// or, when it is linked to a server, the server's galley as the signed-in member, who acts
+  /// as their alias there.
+  ///
+  /// `--by` is refused in a linked galley: the alias is the server's, and a name given here
+  /// that differed from it would sign nothing. GALLEY_BY is ignored there, since it is set
+  /// for the shell, not for one galley. [needsBy] is false for a command that writes nothing.
+  Future<({Galley galley, String by})> acting({bool needsBy = true}) async {
+    final l = link;
+    if (l == null) return (galley: local as Galley, by: needsBy ? by : '');
+    if (argParser.options.containsKey('by') && _args.wasParsed('by')) {
+      throw UsageException(
+        '--by is not given in a galley linked to ${l.url}: you act as your alias there',
+        usage,
+      );
+    }
+    final linked = await (_linked ??= _Linked.open(c, l));
+    return (galley: linked.galley as Galley, by: linked.member.alias);
+  }
+
   /// Appends the event [build] makes to the mark [id], and says what the mark is now.
   ///
   /// An event the core refuses to construct (a reopen with no note) is a usage error.
-  Future<int> record(String id, MarkEvent Function(DateTime at) build) async {
+  Future<int> record(String id, MarkEvent Function(String by, DateTime at) build) async {
+    final (:galley, :by) = await acting();
     final Mark next;
     try {
-      next = await local.record(id, build);
+      next = await galley.record(id, (at) => build(by, at));
     } on ArgumentError catch (e) {
       throw UsageException('${e.message}', usage);
     }
@@ -198,6 +248,11 @@ final class _Pack extends _GalleyCommand {
 
   @override
   Future<int> run() async {
+    if (link case final l?) {
+      throw Refused.invalid(
+        'this galley is linked to ${l.url}: `galley push` renders a round and pushes it there',
+      );
+    }
     final g = galley;
     final n = g.nextRound();
     final exit = await c
@@ -297,7 +352,8 @@ final class _MarkCommand extends _GalleyCommand {
       if (indexPath.contains(null)) throw UsageException('--node is an index path, 0.2.1', usage);
       target = AtNode([...indexPath.nonNulls]);
     }
-    final raised = await local.raise(frame: key, target: target, note: _required('note'), by: by);
+    final (:galley, :by) = await acting();
+    final raised = await galley.raise(frame: key, target: target, note: _required('note'), by: by);
     c.out.writeln('${raised.mark.id}: raised on ${raised.node} in round ${raised.round}');
     return 0;
   }
@@ -321,9 +377,10 @@ final class _Pull extends _GalleyCommand {
 
   @override
   Future<int> run() async {
-    final latest = galley.rounds().lastOrNull;
+    final (galley: target, by: _) = await acting(needsBy: false);
+    final latest = (await target.rounds()).lastOrNull;
     final all = _args.flag('all');
-    final items = await workItems(local, all: all);
+    final items = await workItems(target, all: all);
     if (_args.flag('json')) {
       c.out.writeln(
         const JsonEncoder.withIndent('  ').convert({'latest_round': latest, 'items': items}),
@@ -380,7 +437,7 @@ final class _AnswerCommand extends _GalleyCommand {
     } on ArgumentError catch (e) {
       throw UsageException('${e.name}: ${e.message}', usage);
     }
-    return record(id, (at) => Answered(answer, by: by, at: at));
+    return record(id, (by, at) => Answered(answer, by: by, at: at));
   }
 
   String _commit() =>
@@ -402,7 +459,7 @@ final class _Verify extends _GalleyCommand {
   String get description => 'Accept a mark\'s answer.';
 
   @override
-  Future<int> run() async => record(markArg, (at) => Verified(by: by, at: at));
+  Future<int> run() async => record(markArg, (by, at) => Verified(by: by, at: at));
 }
 
 final class _Reopen extends _GalleyCommand {
@@ -422,7 +479,7 @@ final class _Reopen extends _GalleyCommand {
 
   @override
   Future<int> run() async {
-    return record(markArg, (at) => Reopened(note ?? '', by: by, at: at));
+    return record(markArg, (by, at) => Reopened(note ?? '', by: by, at: at));
   }
 }
 
@@ -443,7 +500,7 @@ final class _Withdraw extends _GalleyCommand {
       'Take back a mark you raised. It is kept, with its history, and waits on no one.';
 
   @override
-  Future<int> run() async => record(markArg, (at) => Withdrawn(note ?? '', by: by, at: at));
+  Future<int> run() async => record(markArg, (by, at) => Withdrawn(note ?? '', by: by, at: at));
 }
 
 final class _Serve extends _GalleyCommand {
@@ -478,6 +535,14 @@ final class _Serve extends _GalleyCommand {
 
   @override
   Future<int> run() async {
+    if (link case final l?) {
+      // Rejected: serving the directory anyway. Its marks are not the server's, and the canvas
+      // would show a galley that looks whole and is not.
+      throw Refused.invalid(
+        'this galley is linked to ${l.url}, and `serve` shows a galley kept here. The canvas '
+        'on a server is not built yet; `galley unlink` serves this directory again',
+      );
+    }
     final port = int.tryParse(_args.option('port')!);
     if (port == null || port < 0 || port > 65535) {
       throw UsageException('--port is 0 to 65535', usage);

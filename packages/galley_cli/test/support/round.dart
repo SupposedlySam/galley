@@ -14,8 +14,10 @@ final blank = FrameKey({'screen': 'blank'});
 const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 /// Round 1: `drawn` has an image and a tree, `blank` has a tree and no image.
-void writeRound(GalleyDirectory g) {
-  final root = g.roundPath(1);
+void writeRound(GalleyDirectory g) => writeRoundAt(g.roundPath(1));
+
+/// The round [writeRound] writes, rendered at [root]: what a renderer writes for a push.
+void writeRoundAt(String root) {
   void write(String path, Object? json) =>
       (File('$root/$path')..createSync(recursive: true)).writeAsStringSync(jsonEncode(json));
   final tree = FrameTree(

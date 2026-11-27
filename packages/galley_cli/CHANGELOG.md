@@ -33,6 +33,22 @@ A Galley server on this machine (DESIGN D15):
   and verifies once the owner has answered; the next round carries the mark, and its history is
   the owner's answer and the reviewer's verify.
 
+A galley on a server (DESIGN D15, "The commands follow the galley"):
+- `galley login <url> --email <you>` signs in by the code the server mails (or `galley host`
+  writes). The session is kept in the user cache, one file per server, readable by the user
+  alone, never in `.galley/`.
+- `galley link <url> --create <name> --alias <you>` makes a galley you own; `--galley <id>`
+  links one you are a member of, or joins one you are invited to (with `--alias`). The link is
+  `.galley/server.json`, which names the server and galley only. `galley unlink` removes it.
+- While linked, `mark`, `pull`, `answer`, `verify`, `reopen` and `withdraw` act on the server
+  as your alias there. `--by` is refused and `GALLEY_BY` ignored. `pack` and `serve` are
+  refused: `galley push` renders a round and pushes it, and the canvas on a server is not
+  built yet.
+- `galley push` renders into `.galley/push/` and pushes it. A push that stops keeps the render,
+  and `galley push --resume` sends it without rendering again.
+- `galley invite <email>`, `galley members` and `galley revoke <alias> [--restore]`.
+- `package:http` is now a dependency.
+
 ## 0.3.8
 
 The canvas, served:
