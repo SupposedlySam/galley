@@ -237,6 +237,9 @@ final class Round {
 
   final Map<FrameKey, RoundFrame> _byKey;
 
+  /// The frame with [key], or null when the round does not have it.
+  RoundFrame? frame(FrameKey key) => _byKey[key];
+
   /// [previous] carried into this round.
   Carried carry(Carried previous) {
     final mark = previous.mark;
@@ -270,4 +273,49 @@ final class Round {
   /// whatever its status. A verified mark is carried too, since nothing is erased, and a
   /// reviewer may want to see that a fix still holds.
   List<Carried> carryAll(List<Carried> previous) => [for (final c in previous) carry(c)];
+}
+
+/// Where every mark is in one round: one [Carried] per mark, stored as the round's
+/// `placements.json`.
+///
+/// Kept per round, not on the mark, because a mark has a placement in every round it was
+/// carried into, and the next round is carried from the last one.
+final class Placements {
+  /// [carried], at most one per mark. Throws an [ArgumentError] if a mark repeats: a mark is in
+  /// one place in a round, and two entries would leave the next round to guess which.
+  Placements(List<Carried> carried) : carried = List.unmodifiable(carried) {
+    for (final c in carried) {
+      if (!identical(_byId.putIfAbsent(c.mark.id, () => c), c)) {
+        throw ArgumentError.value(c.mark.id, 'carried', 'places this mark twice');
+      }
+    }
+  }
+
+  /// Reads the form [toJson] writes, finding each mark with [markOf] (see [Carried.fromJson]).
+  factory Placements.fromJson(Object? json, String context, Mark? Function(String id) markOf) {
+    final r = JsonReader(json, context);
+    final carried = r.readList('placements', (j, c) => Carried.fromJson(j, c, markOf));
+    try {
+      return Placements(carried);
+    } on ArgumentError catch (e) {
+      throw FormatException('$context.placements: mark "${e.invalidValue}" ${e.message}');
+    }
+  }
+
+  /// Every placement, in the order they were made.
+  final List<Carried> carried;
+
+  final _byId = <String, Carried>{};
+
+  /// Where the mark with [id] is, or null when this round does not place it.
+  Carried? of(String id) => _byId[id];
+
+  /// These placements with [more] added. Throws an [ArgumentError] if one places a mark
+  /// already placed.
+  Placements plus(List<Carried> more) => Placements([...carried, ...more]);
+
+  /// The JSON form [Placements.fromJson] reads.
+  JsonMap toJson() => {
+    'placements': [for (final c in carried) c.toJson()],
+  };
 }
