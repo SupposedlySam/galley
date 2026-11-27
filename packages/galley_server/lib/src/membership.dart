@@ -194,6 +194,18 @@ final class ServerAccount {
     };
   }
 
+  /// Where the user stands in galley [galleyId]: a member, one whose access was revoked, invited
+  /// to it, or none of these.
+  ///
+  /// Here once, for every way in: the CLI's `link` and its linked commands, and the canvas.
+  /// The invites are asked for only when the user is not a member, since a member's invite was
+  /// burned when they joined.
+  Future<Standing> standingIn(String galleyId) async {
+    final mine = (await memberships()).where((m) => m.galley == galleyId).firstOrNull;
+    if (mine != null) return mine.revoked ? RevokedFrom(mine) : Joined(mine);
+    return (await invites()).contains(galleyId) ? const InvitedTo() : const Outside();
+  }
+
   /// The user's own memberships, revoked ones too, so a revoked member is told so rather than
   /// shown nothing.
   Future<List<Member>> memberships() async => [
@@ -225,4 +237,41 @@ String newRecordId(Random random) {
   return String.fromCharCodes([
     for (var i = 0; i < 15; i++) alphabet.codeUnitAt(random.nextInt(alphabet.length)),
   ]);
+}
+
+/// Where a user stands in a galley ([ServerAccount.standingIn]). Each way in says what it
+/// means in its own words; what the user may read is still the server's rule, which this does
+/// not replace.
+sealed class Standing {
+  const Standing();
+}
+
+/// A member, whose access stands.
+final class Joined extends Standing {
+  /// [member]'s standing.
+  const Joined(this.member);
+
+  /// The membership.
+  final Member member;
+}
+
+/// A member whose access the owner revoked. What they wrote is kept.
+final class RevokedFrom extends Standing {
+  /// [member]'s standing.
+  const RevokedFrom(this.member);
+
+  /// The membership, revoked.
+  final Member member;
+}
+
+/// Not a member, with an open invite to the galley: they may join it.
+final class InvitedTo extends Standing {
+  /// Invited.
+  const InvitedTo();
+}
+
+/// Neither a member nor invited.
+final class Outside extends Standing {
+  /// Outside.
+  const Outside();
 }

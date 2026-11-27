@@ -2,6 +2,7 @@
 /// core's marks and events.
 library;
 
+export 'src/canvas_link.dart';
 export 'src/membership.dart';
 export 'src/pocketbase.dart';
 export 'src/round_push.dart';

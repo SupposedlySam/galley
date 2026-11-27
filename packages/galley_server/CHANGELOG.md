@@ -36,3 +36,8 @@ The first release of the package (DESIGN D15):
   what is missing; a push of other files is refused while it stands, naming it.
 - `ServerGalley` tells a revoked member their access was revoked, and a non-member that they
   are not one, rather than showing either an empty galley.
+- `ServerAccount.standingIn`: where the signed-in user stands in a galley, as a `Standing`:
+  `Joined`, `RevokedFrom`, `InvitedTo` or `Outside`.
+- `canvasLink`, `galleyOf` and `serverOf`: a galley's canvas on a server is
+  `<server>/?galley=<id>`, said once for the CLI that prints it and the canvas that reads it.
+- The package builds for the web: the canvas signs in and reads a galley through it.
