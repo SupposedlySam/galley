@@ -219,7 +219,7 @@ frame missing from the new round is **retired**, with its history kept. Nothing 
 - *Mutation, 2026-11-26:* 12 of 12 mutants are killed. One survived the first suite: keeping
   the raised anchor for a mark that was not placed. A test was added for it.
 
-## D7 · Server: decided when it is built, against these constraints (2026-11-25)
+## D7 · Server: measured against these constraints, then decided (2026-11-25, decided 2026-11-26)
 
 Reviewers are outside the app's team, so the server needs:
 - sign-in that needs no password, such as an emailed code;
@@ -231,6 +231,43 @@ Reviewers are outside the app's team, so the server needs:
 
 Each candidate backend is measured against this list with a spike before the server is
 written, and the gaps it leaves get a decision here.
+
+### Decided: PocketBase (2026-11-26)
+
+Two candidates were run on loopback against the list, with a real round (155 frames: 27.5 MB of
+PNGs, 16 MB of trees): PocketBase v0.40.6, and a Dart backend-as-a-service. No email reached a
+real person; codes were caught by a hook or an SMTP sink.
+
+| Constraint | PocketBase | The Dart candidate |
+|---|---|---|
+| Emailed-code sign-in | Built in. Password login and open sign-up off. An unknown email gets the same 200, so emails can't be enumerated. | Built in. 3 wrong guesses spend the code. |
+| A non-member reads nothing, streams included | Pass. Rules are evaluated per event, so a removed member gets nothing more on a stream that is still open. | Pass, but membership rides in the token's claims: a removed member keeps reading until the token refreshes. |
+| Invites | Not built in: an invites collection, a create rule and 3 hooks. Self-invite, escalation, reuse and accepting for someone else were refused. | Not built in: a table and a cron job, about 15 s from accept to access. |
+| Images behind membership | Pass. A file is fetched with a short-lived file token (180 s), checked again at fetch. | Pass for one round only: an image's rule sees no galley, so access needs a claims list of image ids, 3.4 KB for 155 frames, which outgrows a header within a few rounds. |
+| Upload of the round | 0.3 s, 0.1 s with 4 workers. | 6 s, 2 s with 4 workers, after raising a 100-per-minute create limit that refused 55 of 155 rows. An oversize image is a bare 500. |
+| Presence | None built in. | None found. |
+
+**PocketBase, because its rules hold where the round is largest.** Images are most of a round,
+and the Dart candidate cannot scope an image to a galley without a list that grows with every
+round. Its revocation also waits for a token refresh, where PocketBase's stops the next event.
+
+What this leaves:
+- **The code lockout.** 5 wrong guesses lock the account for minutes (429, even for a new
+  code), so anyone who knows a reviewer's email can lock them out. Accepted for a handful of
+  invited reviewers; an app-level throttle per requester closes it if it is ever abused.
+- **Carry-forward runs in `galley push`, not on the server.** PocketBase's hooks are JS or Go,
+  so galley_core cannot run inside it. The CLI places every mark (D6) and writes the
+  placements; the server's rules only say who may write them (the galley's owner).
+- **Invites are code we own**: the collection, its rule and the 3 hooks, tested to the same
+  bar as the rest.
+- **Pre-1.0**, so its upgrades are pinned and read before they are taken.
+
+**What hosting needs:** one small machine with a persistent volume (one Go binary and SQLite),
+HTTPS, and outgoing email for the codes. Built-in backups write a zip on a schedule, optionally
+to S3. Who pays for it, and where it runs, is the owner's decision (ROADMAP step 8).
+
+Rejected: deciding on features alone. Both candidates' gaps only showed when they were run,
+the image-scoping limit only with a real round's file count.
 
 ## D8 · Released by git tag until pub.dev (2026-11-25)
 
