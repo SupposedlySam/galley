@@ -10,7 +10,7 @@
 // and reviewed as one. A later change is a later migration; this one is never edited once
 // released, because a server that has run it will not run it again.
 //
-// Three things hold for every collection, and pocketbase_schema_test.dart checks each one
+// Three things hold for every collection, and galley_cli's test/host_test.dart checks each one
 // against the server, not this file:
 // - no relation cascades on delete, and no collection has a delete rule: nothing is erased;
 // - every rule that lets a member read or write requires that the membership is not revoked;

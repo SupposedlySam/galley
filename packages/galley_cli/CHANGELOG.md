@@ -21,7 +21,13 @@ A Galley server on this machine (DESIGN D15):
 - The server's rules are tested here, through `LocalServer`: one galley's members never see or
   write another's, an invite lets its invitee in once as a reviewer, a revoked reviewer loses
   access and keeps their membership, nothing is deleted, every write is judged (a manifest past
-  128 KiB included), and sign-in attempts are rate limited. The first run fetches PocketBase.
+  128 KiB included), and sign-in attempts are rate limited. A round takes only the files its
+  manifest lists, at their sizes, once, and finishes only with every file and every earlier
+  mark placed; a reviewer sees it only then. A mark is raised by a member, as themselves, on the
+  newest finished round. Only the owner answers, the server numbers events, and five verifies
+  sent at once land once. The first run fetches PocketBase.
+- The superuser's password is passed after `--`, so one that starts with `-` (1 in 32 of them)
+  is not read as a flag.
 
 ## 0.3.8
 

@@ -113,12 +113,17 @@ final class LocalServer {
       // from here.
       '--publicDir=$data/public',
     ];
+    // The password after `--`, which ends the flags (cobra, as PocketBase reads its command
+    // line): a base64url password starts with "-" one time in 32, and was read as a flag
+    // ("unknown shorthand flag"). Rejected: a password alphabet without "-". It would leave
+    // every superuser.json already written with one unable to start.
     final upsert = await Process.run(pocketbase, [
       'superuser',
       'upsert',
+      ...flags,
+      '--',
       superuser.email,
       superuser.password,
-      ...flags,
     ]);
     if (upsert.exitCode != 0) {
       throw Refused.environment(

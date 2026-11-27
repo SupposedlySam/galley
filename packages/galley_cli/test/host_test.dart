@@ -63,6 +63,66 @@ void main() {
         ],
   };
 
+  /// A file of [size] bytes, for a manifest that says so.
+  ({String name, List<int> bytes}) bytes(int size) => (name: 'f.bin', bytes: List.filled(size, 7));
+
+  /// Uploads [size] bytes as [path] of [round] ([galley]'s), as [who].
+  Future<Answer> upload(As who, String round, String path, int size) =>
+      who.upload('files', {'round': round, 'path': path}, {'file': bytes(size)});
+
+  /// Finishes [round] with [placements] (the core's Carried form), as [who].
+  Future<Answer> finish(As who, String round, [List<Object?> placements = const []]) =>
+      who.update('rounds', round, {
+        'finished': true,
+        'placements': {'placements': placements},
+      });
+
+  /// Round [number] of [galley], pushed whole: its one file uploaded, and finished with
+  /// [placements]. Its id.
+  Future<String> pushed(String galley, int number, [List<Object?> placements = const []]) async {
+    final made = await owner.create('rounds', round(galley, number));
+    if (made.status != 200) throw StateError('round $number was not made: ${made.body}');
+    final id = (made.body as Map)['id'] as String;
+    for (final a in [
+      await upload(owner, id, 'index.json', 10),
+      await finish(owner, id, placements),
+    ]) {
+      if (a.status != 200) throw StateError('round $number was not pushed: ${a.body}');
+    }
+    return id;
+  }
+
+  const anchor = {
+    'type': 'Text',
+    'path': [0, 2],
+    'rect': {'left': 10, 'top': 20, 'width': 100, 'height': 40},
+  };
+
+  /// A mark on [round]'s home frame, raised by [who], or by [author] when given.
+  Future<Answer> raise(As who, String round, {String? author, String frame = 'screen=home'}) =>
+      who.create('marks', {
+        'round': round,
+        'frame': frame,
+        'anchor': anchor,
+        'pin': {'dx': 0.5, 'dy': 0.5},
+        'note': 'The label is clipped',
+        'author': author ?? who.id,
+      });
+
+  /// A reviewer of [galley], invited by the owner and in under [alias].
+  Future<As> reviewerOf(String galley, String email, String alias) async {
+    await owner.create('invites', {'galley': galley, 'email': email});
+    final who = await As.signIn(server, email);
+    final joined = await who.create('members', {
+      'galley': galley,
+      'user': who.id,
+      'role': 'reviewer',
+      'alias': alias,
+    });
+    if (joined.status != 200) throw StateError('$email did not join: ${joined.body}');
+    return who;
+  }
+
   group('galley host', () {
     test("keeps its data its owner's alone, and its superuser the same on every start", () async {
       final data = '${tmp.path}/again';
@@ -79,6 +139,19 @@ void main() {
         },
         {data: 'rwx------', '$data/otp': 'rwx------', '$data/superuser.json': 'rw-------'},
       );
+    });
+
+    test('starts with a superuser password that looks like a flag', () async {
+      final data = '${tmp.path}/dash';
+      Directory(data).createSync(recursive: true);
+      final password = '-Lte9LpujMm4fsxqlB0M24fz5D8Y6k58';
+      File('$data/superuser.json').writeAsStringSync(
+        jsonEncode({'email': 'galley-host@galley.invalid', 'password': password}),
+      );
+      final dashed = await host(data);
+      addTearDown(dashed.close);
+      expect(await dashed.superuserToken(), isNotEmpty);
+      expect(File('$data/superuser.json').readAsStringSync(), contains(password));
     });
 
     test('logs what PocketBase says, and no SQL, though it runs from the cache', () async {
@@ -205,7 +278,9 @@ void main() {
   });
 
   group('the schema', () {
-    test('deletes nothing: no collection has a delete rule, and no relation cascades', () async {
+    /// Galley's collections as the server holds them, read as its superuser: PocketBase's own
+    /// system collections left out.
+    Future<List<Map<String, Object?>>> collections() async {
       final token = await server.superuserToken();
       final client = HttpClient();
       addTearDown(client.close);
@@ -213,10 +288,14 @@ void main() {
       request.headers.set('Authorization', token);
       final items =
           (jsonDecode(await utf8.decodeStream(await request.close())) as Map)['items'] as List;
-      final galleys = [
+      return [
         for (final c in items.cast<Map<String, Object?>>())
           if (c['system'] != true) c,
       ];
+    }
+
+    test('deletes nothing: no collection has a delete rule, and no relation cascades', () async {
+      final galleys = await collections();
       expect(
         [for (final c in galleys) c['name']],
         unorderedEquals([
@@ -241,6 +320,19 @@ void main() {
       ];
       expect(relations, hasLength(greaterThanOrEqualTo(8)), reason: 'the population looked at');
       expect(relations.where((r) => !r.endsWith(': false')), isEmpty);
+    });
+
+    // The hook's transaction is what keeps two events from taking one place in a history (an
+    // event, below: five verifies at once land once, and no write ever reaches this index).
+    // The index is the second guard, for a writer that is not the hook, so no write can show
+    // it is there, and it is read here instead.
+    test('holds a place in a history once: (mark, seq) is unique', () async {
+      final events = (await collections()).singleWhere((c) => c['name'] == 'events');
+      final indexes = (events['indexes'] as List).cast<String>();
+      expect(
+        indexes.map((i) => i.replaceAll(RegExp(r'\s+'), ' ').replaceAll('`', '')),
+        contains(matches(RegExp(r'^CREATE UNIQUE INDEX \S+ ON events \(mark, seq\)$'))),
+      );
     });
   });
 
@@ -276,6 +368,224 @@ void main() {
       final refused = await owner.create('rounds', round(galley, 3, manifest));
       expect(messageOf(refused), 'Round 3 is not next: the next round is 2.');
     });
+  });
+
+  group('a round', () {
+    test(
+      'takes the files its manifest lists, at their sizes, once each, until it is finished',
+      () async {
+        final galley = await owner.makeGalley('Files');
+        final made = await owner.create(
+          'rounds',
+          round(galley, 1, [
+            {'path': 'a.png', 'sha256': 'a' * 64, 'size': 100},
+            {'path': 'b.png', 'sha256': 'b' * 64, 'size': 50},
+          ]),
+        );
+        final id = (made.body as Map)['id'] as String;
+
+        Future<String?> refusal(String path, int size) async =>
+            messageOf(await upload(owner, id, path, size));
+        expect(await refusal('c.png', 100), "The round's manifest does not list c.png.");
+        expect(await refusal('a.png', 99), 'A.png is 99 bytes, and the manifest says 100.');
+        expect((await upload(owner, id, 'a.png', 100)).status, 200);
+        expect(await refusal('a.png', 100), 'The round already has a.png.');
+
+        final early = await finish(owner, id);
+        expect(messageOf(early), 'Round 1 is missing 1 of its files: b.png.');
+        expect((await upload(owner, id, 'b.png', 50)).status, 200);
+        expect((await finish(owner, id)).status, 200);
+        expect((await owner.view('rounds', id)).body, containsPair('finished', true));
+
+        expect(
+          await refusal('b.png', 50),
+          'The round is finished, and a finished round is not changed.',
+        );
+        expect((await finish(owner, id)).status, 404, reason: 'a round is finished once');
+        final files = await owner.records('files', filter: 'round = "$id"', sort: 'path');
+        expect([for (final f in files) f['path']], ['a.png', 'b.png']);
+      },
+    );
+
+    test('is seen by a reviewer, with its files, only once it is finished', () async {
+      final galley = await owner.makeGalley('Unseen');
+      final reviewer = await reviewerOf(galley, 'early@example.com', 'Early');
+      final made = await owner.create(
+        'rounds',
+        round(galley, 1, [
+          {'path': 'index.json', 'sha256': 'a' * 64, 'size': 10},
+          {'path': 'b.json', 'sha256': 'b' * 64, 'size': 20},
+        ]),
+      );
+      final id = (made.body as Map)['id'] as String;
+      expect((await upload(owner, id, 'index.json', 10)).status, 200);
+      expect(await reviewer.ids('rounds'), isEmpty);
+      expect(await reviewer.ids('files'), isEmpty);
+      // A file the manifest lists and nobody has sent: only the rule can refuse it.
+      expect((await upload(reviewer, id, 'b.json', 20)).status, 400, reason: 'nor written');
+      expect((await upload(owner, id, 'b.json', 20)).status, 200, reason: 'the control');
+      expect((await finish(reviewer, id)).status, 404);
+
+      expect((await finish(owner, id)).status, 200);
+      expect(await reviewer.ids('rounds'), [id]);
+      expect(await reviewer.ids('files'), hasLength(2));
+    });
+
+    test('finishes only once it places every mark raised before it, and raises none', () async {
+      final galley = await owner.makeGalley('Placed');
+      final first = await pushed(galley, 1);
+      final mark = ((await raise(owner, first)).body as Map)['id'] as String;
+      final made = await owner.create('rounds', round(galley, 2));
+      final second = (made.body as Map)['id'] as String;
+      expect((await upload(owner, second, 'index.json', 10)).status, 200);
+
+      final unplaced = await finish(owner, second);
+      expect(messageOf(unplaced), 'Round 2 does not place $mark; carry every mark again.');
+      final raised = await finish(owner, second, [
+        {
+          'mark': mark,
+          'placement': {'kind': 'raised'},
+          'anchor': anchor,
+        },
+      ]);
+      expect(messageOf(raised), 'Mark $mark was raised on an earlier round, not 2.');
+      final unknown = await finish(owner, second, [
+        {
+          'mark': 'nosuchmark0000',
+          'placement': {'kind': 'retired'},
+          'anchor': anchor,
+        },
+      ]);
+      expect(unknown.status, 400);
+      expect((await owner.view('rounds', second)).body, containsPair('finished', false));
+
+      final retired = await finish(owner, second, [
+        {
+          'mark': mark,
+          'placement': {'kind': 'retired'},
+          'anchor': anchor,
+        },
+      ]);
+      expect(retired.status, 200, reason: '${retired.body}');
+      expect(((await owner.view('rounds', second)).body as Map)['placements'], {
+        'placements': [
+          {
+            'mark': mark,
+            'placement': {'kind': 'retired'},
+            'anchor': anchor,
+          },
+        ],
+      });
+    });
+  });
+
+  group('a mark', () {
+    test('is raised by a member, as themselves, on a frame of the newest finished round', () async {
+      final galley = await owner.makeGalley('Marked');
+      final reviewer = await reviewerOf(galley, 'marker@example.com', 'Marker');
+      final made = await owner.create('rounds', round(galley, 1));
+      final first = (made.body as Map)['id'] as String;
+      expect(messageOf(await raise(owner, first)), 'Round 1 is still being pushed.');
+      expect((await upload(owner, first, 'index.json', 10)).status, 200);
+      expect((await finish(owner, first)).status, 200);
+
+      final mine = await raise(reviewer, first);
+      expect(mine.status, 200, reason: '${mine.body}');
+      expect((mine.body as Map)['author'], reviewer.id);
+      expect((await raise(reviewer, first, author: owner.id)).status, 400, reason: 'as another');
+      expect((await raise(await stranger('outsider@example.com'), first)).status, 400);
+      expect(
+        messageOf(await raise(reviewer, first, frame: 'screen=away')),
+        'Round 1 has no frame screen=away.',
+      );
+      expect(
+        messageOf(await raise(reviewer, first, frame: 'not a key')),
+        startsWith('Request.mark.frame'),
+      );
+
+      await pushed(galley, 2, [
+        {
+          'mark': (mine.body as Map)['id'],
+          'placement': {'kind': 'retired'},
+          'anchor': anchor,
+        },
+      ]);
+      expect(
+        messageOf(await raise(reviewer, first)),
+        'Round 1 is out: round 2 is the newest; reload.',
+      );
+      expect(await owner.ids('marks'), contains((mine.body as Map)['id']));
+      expect(
+        (await owner.records('marks', filter: 'round.galley = "$galley"')).length,
+        1,
+        reason: 'only the one that was allowed',
+      );
+    });
+  });
+
+  group('an event', () {
+    test(
+      'is an answer only from the owner, numbered by the server, in an order the core allows',
+      () async {
+        final galley = await owner.makeGalley('Answered');
+        final reviewer = await reviewerOf(galley, 'asker@example.com', 'Asker');
+        final first = await pushed(galley, 1);
+        final mark = ((await raise(reviewer, first)).body as Map)['id'] as String;
+
+        Future<Answer> event(As who, Map<String, Object?> body) =>
+            who.create('events', {'mark': mark, 'author': who.id, ...body});
+        const fixed = {'kind': 'answered', 'answer': 'fixed', 'commit': 'abc1234'};
+
+        expect(messageOf(await event(reviewer, fixed)), "Only the galley's owner answers a mark.");
+        expect(messageOf(await event(owner, {'kind': 'verified'})), contains('cannot be verified'));
+        expect(
+          (await event(owner, {...fixed, 'seq': 1})).status,
+          400,
+          reason: 'seq is the server\'s',
+        );
+        expect(
+          (await event(owner, {...fixed, 'author': reviewer.id})).status,
+          400,
+          reason: 'as another',
+        );
+        expect(
+          (await event(await stranger('meddler@example.com'), {'kind': 'verified'})).status,
+          400,
+        );
+
+        final answered = await event(owner, fixed);
+        expect(answered.status, 200, reason: '${answered.body}');
+        expect((answered.body as Map)['seq'], 1);
+
+        final reopened = await event(reviewer, {
+          'kind': 'reopened',
+          'note': 'Still clipped on the tablet',
+        });
+        expect(reopened.status, 200, reason: '${reopened.body}');
+        expect((await event(owner, fixed)).status, 200, reason: 'answered again');
+
+        // Five verifies at once: the server's writes take turns (main.pb.js), so the first lands
+        // and the other four find the mark already verified, which is final.
+        final verifies = await Future.wait([
+          for (var i = 0; i < 5; i++) event(reviewer, {'kind': 'verified'}),
+        ]);
+        expect([for (final v in verifies) v.status]..sort(), [200, 400, 400, 400, 400]);
+        for (final v in verifies.where((v) => v.status == 400)) {
+          expect(messageOf(v), contains('cannot be verified'));
+        }
+
+        final history = await reviewer.records('events', filter: 'mark = "$mark"', sort: 'seq');
+        expect(
+          [for (final e in history) (e['seq'], e['kind'], e['author'])],
+          [
+            (1, 'answered', owner.id),
+            (2, 'reopened', reviewer.id),
+            (3, 'answered', owner.id),
+            (4, 'verified', reviewer.id),
+          ],
+        );
+      },
+    );
   });
 
   group('a galley', () {

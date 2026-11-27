@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:galley_cli/galley_cli.dart';
 import 'package:galley_cli/src/rest.dart';
 
-export 'package:galley_cli/src/rest.dart' show Answer, messageOf;
+export 'package:galley_cli/src/rest.dart' show Answer, Multipart, messageOf;
 
 // A user of a LocalServer, signed in by the code it writes in place of mail, speaking
 // PocketBase's REST API directly. For the server's tests only: what these tests prove is the
@@ -50,18 +50,42 @@ final class As {
   Future<Answer> view(String collection, String id) =>
       _send(server, 'GET', '/api/collections/$collection/records/$id', null, _token);
 
-  /// The ids of the [collection] records this user may list.
-  Future<List<String>> ids(String collection) async {
+  /// A [collection] record with [fields] and [files], sent as parts, as a file field must be.
+  Future<Answer> upload(
+    String collection,
+    Map<String, String> fields,
+    Map<String, ({String name, List<int> bytes})> files,
+  ) => _send(
+    server,
+    'POST',
+    '/api/collections/$collection/records',
+    Multipart(fields, files),
+    _token,
+  );
+
+  /// The [collection] records this user may list, matching PocketBase's [filter] when given,
+  /// sorted by [sort].
+  Future<List<Map<String, Object?>>> records(
+    String collection, {
+    String? filter,
+    String sort = 'created',
+  }) async {
+    final query = Uri(queryParameters: {'perPage': '500', 'sort': sort, 'filter': ?filter}).query;
     final a = await _send(
       server,
       'GET',
-      '/api/collections/$collection/records?perPage=500',
+      '/api/collections/$collection/records?$query',
       null,
       _token,
     );
     if (a.status != 200) throw StateError('listing $collection answered ${a.status}: ${a.body}');
-    return [for (final r in (a.body as Map)['items'] as List) (r as Map)['id'] as String];
+    return ((a.body as Map)['items'] as List).cast<Map<String, Object?>>();
   }
+
+  /// The ids of the [collection] records this user may list.
+  Future<List<String>> ids(String collection) async => [
+    for (final r in await records(collection)) r['id'] as String,
+  ];
 
   /// A galley named [name], with this user as its owner under [alias], made the one way it
   /// can be: the galley and the owner's membership in one batch.

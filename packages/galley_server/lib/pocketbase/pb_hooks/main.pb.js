@@ -65,8 +65,11 @@ onRecordCreateExecute((e) => {
       role: writer.role,
       by: writer.alias,
     });
-    // Two events written at once both count the same history; the unique (mark, seq) index
-    // refuses the second, and its writer refetches and tries again.
+    // PocketBase runs one writing transaction at a time, so of two events sent at once the
+    // second is judged and numbered against a history that holds the first. Without
+    // `e.app = tx` the save would wait on the transaction this hook holds, and never end
+    // (measured: the suite hung). The unique (mark, seq) index is a second guard, for a writer
+    // that is not this hook. The writer is not retried: its refusal is the answer.
     e.record.set("seq", history.length + 1);
     e.app = tx;
     e.next();

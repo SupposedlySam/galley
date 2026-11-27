@@ -268,6 +268,12 @@ What this leaves:
 - **Invites are code we own**: the collection, its rule and the 3 hooks, tested to the same
   bar as the rest.
 - **Pre-1.0**, so its upgrades are pinned and read before they are taken.
+- **A stack unlike the owner's other services.** The Dart candidate is what they already run,
+  and PocketBase is one more thing to know, operate and keep current. Weighed after the
+  decision (2026-11-27), when the owner asked, and it does not change it: the image-scoping gap
+  is a limit of the Dart candidate's rule language (a read rule has no subquery), not a missing
+  feature to wait for. It would be reopened by a release whose read rules can check a
+  membership row, which would also lift the revocation gap.
 
 **What hosting needs:** one small machine with a persistent volume (one Go binary and SQLite),
 HTTPS, and outgoing email for the codes. Built-in backups write a zip on a schedule, optionally
@@ -561,15 +567,17 @@ Each one names the failure it prevents.
 |---|---|---|---|
 | `users` | email | nobody: an invite makes the user | sign-up, a password |
 | `galleys` | name, owner | any signed-in user, as owner | deleted |
-| `members` | galley, user, role (owner or reviewer), alias, revoked | the hook that makes a galley (its owner); the invitee, accepting, who chooses the alias; the owner, revoking | deleted; two for one user in one galley; an alias changed by a member |
-| `invites` | galley, email (lower-cased), role, accepted | the galley's owner; the hook that burns it on accepting | reused, accepted for someone else, made by a reviewer |
+| `members` | galley, user, role (owner or reviewer), alias, revoked | the galley's owner, in the batch that makes the galley; the invitee, accepting, who chooses the alias; the owner, revoking | deleted; two for one user in one galley; an alias changed by a member |
+| `invites` | galley, email (lower-cased), accepted | the galley's owner; the hook that burns it on accepting | reused, accepted for someone else, made by a reviewer; for an owner (an invite makes a reviewer, so it carries no role) |
 | `rounds` | galley, number, frame keys, manifest (path, SHA-256, size), placements, finished | the owner, while pushing | read by a reviewer before `finished`; changed after it; two with one number |
 | `files` | round, path, the file | the owner, before the round is finished, at a path its manifest lists | updated or deleted; two at one path |
-| `marks` | galley, round, frame key, anchor, pin, note, author | any member, as themselves | updated or deleted; raised on a round a newer one replaced, or on a frame it does not have |
+| `marks` | round, frame key, anchor, pin, note, author | any member, as themselves | updated or deleted; raised on a round a newer one replaced, or on a frame it does not have |
 | `events` | mark, seq, kind, note, commit, answer kind, author | any member, as themselves; an answer only the owner | updated or deleted; one the mark's history does not allow; two with one seq |
 
 Every rule also requires that the writer's membership is not revoked, and takes the galley
-from the row written to (the mark's, the round's), never from a field of the request.
+from the row written to (the mark's, the round's), never from a field of the request. A mark
+and an event have no galley column: theirs is their round's, reached through the relation, so
+it cannot disagree with it.
 
 - **Nothing is erased, and the schema says so.** No relation cascades on delete, no
   collection has a delete rule, and a migration test checks both, for every collection.
@@ -601,7 +609,7 @@ from the row written to (the mark's, the round's), never from a field of the req
   written. It carried a `by` and an `at` the client chose, and any shape that
   `MarkEvent.fromJson` cannot read would make the mark unreadable for everyone.
 - **The core judges every write.** A hook gathers the write, the mark, its events in `seq`
-  order and the writer's role. It passes them as JSON to `galley_validate`, a Dart program
+  order and the writer's role. It writes them as JSON to a file and passes its path to `galley_validate`, a Dart program
   over galley_core compiled with `dart compile exe`, inside the write's transaction. The
   validator answers `{"ok": true}` or `{"refused": "<why>"}`, which the hook returns as a 400.
   It folds the history as `Mark` does and checks the new event with `MarkEvent.apply`. It also
@@ -621,14 +629,22 @@ from the row written to (the mark's, the round's), never from a field of the req
   it cross-compiled (`--target-os linux`, checked from macOS).
 - **Two writes to one mark at once cannot both land.** The hook gives each event `seq` =
   the count of earlier events + 1, and (mark, seq) is unique. Both run inside the transaction
-  that judges the event. Of a withdrawal and an answer sent together, one is refused by the
-  index. The client refetches the history and tries again once, then reports the conflict.
+  that judges the event, and PocketBase runs one writing transaction at a time, so the second
+  of two events sent together is judged against a history that holds the first. Five verifies
+  sent at once land once, and the other four are refused in the core's words (galley_cli's
+  `host_test.dart`). The index is a second guard, for a writer that is not the hook. The client
+  does not retry: the refusal it gets is the answer, against the history that landed.
   Rejected: ordering by `created`, which has millisecond resolution, so two events could tie.
+  *Corrected 2026-11-27:* this said the index refused the second and the client tried again;
+  measured, the transactions never interleave, so the index is not reached.
 - **A mark that still does not fold is shown damaged, alone.** If the database was edited, or
   the validator has a bug, that mark is listed with the reason, and the others are read.
   Locally, D12 refuses the whole galley, because the owner is its only writer and should fix
   it. On a server, one bad record must not hide every other member's marks (an unknown is
-  never nothing, but it is not everything either).
+  never nothing, but it is not everything either). *Not built yet (0.3.9):* `Galley.marks`
+  has no form for a damaged mark, so the client refuses the read as `Refused.damaged`, naming
+  the mark and why. It never drops the mark. The form comes with the canvas on the server,
+  which is what shows it.
 - **A round is finished last, and whole.** `galley push`:
   1. creates the round with its frame keys and manifest;
   2. uploads its files in parallel;
