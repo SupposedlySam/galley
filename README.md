@@ -8,7 +8,9 @@ the answers. Rounds stack, and nothing is erased.
 from inside an app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local
 galley: pack, mark, pull, answer, verify, with every mark carried into the next round. `galley
 serve` serves that galley on this machine, with the canvas, where its owner marks the round in
-a browser. The server that outside reviewers use is not built yet ([the plan](docs/ROADMAP.md)).
+a browser. A galley can also live on a Galley server, where reviewers sign in by a mailed code
+and mark it on the same canvas; `galley host` runs one on this machine, and hosting one for
+others is not built yet ([the plan](docs/ROADMAP.md)).
 
 | Package | What it is |
 |---|---|
@@ -145,7 +147,8 @@ build.
 
 For reviewers who are not at the owner's machine, a galley lives on a Galley server (DESIGN
 D15). `galley host` runs one on this machine, writing sign-in codes to a directory rather than
-mailing them; hosting one for others is not built yet.
+mailing them, and serves the canvas at its root (the pinned release's, or `--web <dir>`);
+hosting one for others is not built yet.
 
 ```sh
 dart run galley_cli:galley login <url> --email you@example.com   # asks for the mailed code
@@ -155,10 +158,13 @@ dart run galley_cli:galley invite reviewer@example.com
 dart run galley_cli:galley members                 # or: revoke <alias> [--restore]
 ```
 
-A reviewer runs `login`, then `link <url> --galley <id> --alias <name>`. While `.galley/` is
-linked, `mark`, `pull`, `answer`, `verify`, `reopen` and `withdraw` act on the server as your
-alias there: `--by` is refused and `GALLEY_BY` ignored. `pack` and `serve` are refused (the
-canvas does not read a server yet). A push that stops keeps its render in `.galley/push/`, and
+`link` and `invite` print the galley's canvas, `<url>/?galley=<id>`. A reviewer opens it, signs
+in with the email they were invited by and the code mailed to it, and says the alias to sign
+their marks with; the browser keeps the sign-in. One who would rather use the CLI runs `login`,
+then `link <url> --galley <id> --alias <name>`. While `.galley/` is linked, `mark`, `pull`,
+`answer`, `verify`, `reopen` and `withdraw` act on the server as your alias there: `--by` is
+refused and `GALLEY_BY` ignored. `pack` and `serve` are refused, and `serve` names the canvas
+on the server. A push that stops keeps its render in `.galley/push/`, and
 `galley push --resume` sends it. `.galley/server.json` names only the server and galley; the
 sign-in is kept in the user cache, readable by you alone. `galley unlink` goes back to the
 local galley, whose marks are not imported.

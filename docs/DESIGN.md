@@ -730,16 +730,40 @@ packages/galley_server/   what speaks the server's language. Depends on galley_c
   then on `pull`, `answer`, `verify`, `reopen`, `withdraw` and `mark` act on the server as
   the signed-in user, and `push` replaces `pack`. In that mode `pack` and `--by` are refused,
   not ignored, and `GALLEY_BY` is ignored, since it is set for the shell, not for one galley.
-  `serve` is refused too, until the canvas reads a server (0.3.10). `galley login` signs in by
+  `serve` is refused too, and names the galley's canvas on the server. `galley login` signs in by
   emailed code. The token is kept in the user cache directory, one file per server, the
   directory readable by the user alone (700, each file 600), never in `.galley/`, which may
   be committed (D12). `galley invite`, `members` and `revoke` are the owner's; a reviewer joins
   with `galley link <url> --galley <id> --alias <name>`. A revoked member is told so, never
-  shown an empty galley. The
+  shown an empty galley, and one who is invited and has not joined (a link copied from a
+  teammate's checkout, which holds no token) is told how to join. The
   owner's agent uses the owner's token, so its answers carry the owner's alias, as `--by`
   does locally. The local marks and rounds stay where they are, unused, and `galley unlink`
   goes back to them. Not built: importing local marks. Their `by` names nobody on the
   server, and mapping each one to a member is a decision for the owner.
+- **The canvas is served by the server, from the same origin as its API.** `galley host` runs
+  PocketBase with the canvas's build as its public directory: the pinned release's, from the
+  cache (D14), or `--web <dir>`. Without one it says so and serves the API, as `serve` does.
+  A galley's canvas is `<server>/?galley=<id>`, which `galley link` and `galley invite`
+  print. The convention is galley_server's (`canvasLink`, `galleyOf`, `serverOf`), so the CLI
+  that prints the link and the canvas that reads it cannot drift. Rejected: a path per galley.
+  The server would have to answer it with the canvas's page, and the canvas would have to tell
+  its own root from the path. Rejected too: guessing the mode from what answers. `serve` and
+  the server both answer under `/api`, and a canvas that probed would read an outage of one
+  as the other; `?galley=` says it.
+- **A reviewer signs in on the canvas** by the code the server mails, then the canvas asks
+  where they stand in the galley (`ServerAccount.standingIn`). It opens the galley for a member,
+  asks an invited user for the alias to join as, and tells a revoked user or a stranger why
+  they are not let in. The reviewer is the alias, with no name field: the server records the
+  user and reads them back by alias, and refuses any other `by`. The session is kept in the
+  browser's `localStorage`, under the server's origin, and renewed on each visit, so a
+  reviewer who comes back is still signed in. A renewal the server refuses is said, and the
+  kept session is not cleared, since a server down for a moment would otherwise sign everyone
+  out. Rejected: `sessionStorage`, which forgets the sign-in with the tab, and an HTTP-only
+  cookie, which the canvas could not send as the `Authorization` it signs every request
+  with. The page runs no script but its own (D14), so a token a script can read is read by
+  the canvas alone. Not checked yet: the entry in a real browser against `galley host`; its
+  steps are tested against a fake server, and the client under it against a real one.
 - **The owner may verify their own answer.** The core allows it, and the server does not
   narrow it, because the first adopting app's owner is also one of its reviewers. Narrowing it
   is a rule for the validator, if a galley ever needs it.
