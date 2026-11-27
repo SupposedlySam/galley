@@ -4,6 +4,24 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.8
+
+The canvas, served:
+- `galley serve` serves the canvas at `/` with no `--web`: the build attached to the release
+  `pinnedCanvas` names, fetched once into `$GALLEY_CACHE` (else the platform's user cache
+  directory, under `galley/`), checked against its SHA-256 before anything is unpacked, and
+  unpacked whole or not at all (DESIGN D14). After that it starts with no network. When there
+  is no canvas, the API is still served, and `serve` says why at start and at `/`. `--web
+  <dir>` serves another build.
+- The archive is read by `readTarGz`: ustar, with pax headers for long names, of files and
+  directories only. A link, a device, or a path that would leave its directory is refused.
+- `GalleyServer.start` takes a `CanvasSource` in place of `web`. `placementName` is now
+  `Placement.name`, in `galley_core`.
+- A round's placements naming a mark that is not there is refused naming both files: the
+  placements, and the mark's file to put back.
+- `POST /api/marks` with `at` given as a pin's `{"dx", "dy"}` is 400, saying to give `[x, y]`.
+- A new dependency, `crypto`, for the SHA-256.
+
 ## 0.3.7
 
 From the first app to call `galley serve`, and for the canvas:

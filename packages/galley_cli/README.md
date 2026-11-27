@@ -31,7 +31,13 @@ its axes, and the widget is its `node`, a point `at`, or both. A malformed reque
 well-formed one that cannot be 422, a mark that is not there 404, an event its mark does not
 allow 409, and a galley whose own files do not read 500, naming the file (`serve` checks at
 start too).
-`--web <dir>` serves a built canvas at `/`.
+
+At `/` it serves the canvas: the build attached to the release `pinnedCanvas` names, fetched
+on the first start into `$GALLEY_CACHE` (else the platform's user cache directory, under
+`galley/`), checked against its SHA-256 before anything is unpacked, and unpacked whole or not
+at all (DESIGN D14). Later starts need no network. When there is no canvas, `serve` says why
+and serves the API; `/` answers 404 with the same reason. `--web <dir>` serves a built canvas
+in its place.
 
 `pull --json` is for an agent working through the marks:
 

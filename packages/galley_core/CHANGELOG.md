@@ -4,6 +4,19 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.8
+
+For the canvas, which reads rounds and marks through these rather than working them out again
+(DESIGN D1):
+- `FrameTree.allAt(x, y)`: every widget whose box holds the point, deepest first, and among
+  equal depths the one painted last. `deepestAt` is its first.
+- `Placement.name`: the word a person reads for a placement (raised, exact, moved, lost,
+  unplaced, retired), so the commands and the canvas say the same word.
+- `Carried.box` and `Carried.pin`: the widget's box in the placement's round, and where the pin
+  is in it. Null when the mark is on no widget there (lost, unplaced, retired).
+- `MarkStatus.isFinal`: verified or withdrawn.
+- `JsonReader.optionalInteger`.
+
 ## 0.3.7
 
 - `Withdrawn`: whoever raised a mark takes it back, saying why. `MarkStatus.withdrawn` is

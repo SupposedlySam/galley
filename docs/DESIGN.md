@@ -518,8 +518,9 @@ GET  /<path>                    the built canvas, from --web
 `galley_web` is a Flutter web app, and an app adopts Galley by git tag (D8), so `galley
 serve` must find a built canvas that nobody on the app's side built. Measured on this
 machine: `flutter build web --release --no-web-resources-cdn` is 40 MB (CanvasKit 36 MB,
-`main.dart.js` 1.7 MB), 14 MB as tar.gz. Decided with 0.3.7, and built with the canvas's first
-release.
+`main.dart.js` 1.7 MB), 14 MB as tar.gz. Decided with 0.3.7, and built in 0.3.8, whose
+archive is 14,373,021 bytes in 54 entries. How a release builds and pins it is
+[RELEASING.md](RELEASING.md).
 
 - **The build is a GitHub release asset, `galley_web-<version>.tar.gz`, on the tag it was
   built from.** `galley_cli` pins it in its source: the tag and the archive's SHA-256. A

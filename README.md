@@ -4,17 +4,18 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.7, the local loop.** Galley renders and records a round of frames from inside an
-app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local galley: pack,
-mark, pull, answer, verify, with every mark carried into the next round. `galley serve` serves
-that galley on this machine for the canvas. The canvas and the server that outside reviewers
-use are not built yet ([the plan](docs/ROADMAP.md)).
+**Status: 0.3.8, the local loop and its canvas.** Galley renders and records a round of frames
+from inside an app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local
+galley: pack, mark, pull, answer, verify, with every mark carried into the next round. `galley
+serve` serves that galley on this machine, with the canvas, where its owner marks the round in
+a browser. The server that outside reviewers use is not built yet ([the plan](docs/ROADMAP.md)).
 
 | Package | What it is |
 |---|---|
 | [`galley`](packages/galley) | Flutter, test-time. The `GalleyHost` an app implements, the built-in axes, the renderer and the packer. |
 | [`galley_core`](packages/galley_core) | Pure Dart. Frame keys, frame trees, anchors and re-anchoring, marks, the round planner, frame records and the stored round. |
 | [`galley_cli`](packages/galley_cli) | Dart. The `galley` command: a local galley of rounds and marks. |
+| [`galley_web`](packages/galley_web) | Flutter web. The canvas `galley serve` serves. Not a dependency: it ships built, with each release that changes it. |
 
 ## Adopting it
 
@@ -26,7 +27,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.7
+      ref: v0.3.8
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -104,7 +105,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley_cli
-      ref: v0.3.7
+      ref: v0.3.8
 ```
 
 Add `.galley/` to `.gitignore`. Otherwise the earlier rounds make every later round look as if
@@ -132,8 +133,13 @@ app's owner and for tests. A mark is never deleted: whoever raised one takes it 
 
 `galley serve` serves the galley on `http://localhost:7340/` (`--port` to change it) until
 Ctrl-C: the rounds' files, every mark, and new marks and events through the same checks as the
-commands (DESIGN D13). It listens on loopback only, and `--web <dir>` serves the built canvas
-at `/`.
+commands (DESIGN D13). It listens on loopback only. At `/` is the canvas: open
+`http://localhost:7340/?by=<your name>`, click a widget on a frame to mark it, and answer,
+verify or reopen in its thread. The canvas is a build attached to the release, fetched once
+into a cache outside the app (`GALLEY_CACHE`, else the user cache directory) and checked
+against the hash this release pins before it is unpacked (DESIGN D14). With no network on the
+first start, `serve` says there is no canvas and serves the API. `--web <dir>` serves another
+build.
 
 ## What a round contains
 
@@ -158,6 +164,7 @@ the app never painted, a word broken across lines, inside the picture or out of 
 - [docs/DESIGN.md](docs/DESIGN.md): the principles, every decision, and what each rejected.
 - [docs/BOUNDARY.md](docs/BOUNDARY.md): what Galley assumes about Flutter, with citations.
 - [docs/ROADMAP.md](docs/ROADMAP.md): the steps to the first reviewed round, each one checkable.
+- [docs/RELEASING.md](docs/RELEASING.md): cutting a release, and building and pinning the canvas.
 - [llms.txt](llms.txt): the same, for an agent.
 
 ## Developing
@@ -170,6 +177,7 @@ dart format -l 100 packages
 (cd packages/galley_core && dart analyze && dart test)
 (cd packages/galley && flutter analyze && flutter test)
 (cd packages/galley_cli && dart analyze && dart test)
+(cd packages/galley_web && flutter analyze && flutter test)
 ```
 
 ## License
