@@ -52,8 +52,22 @@ Map<String, List<int>> roundFiles({String note = ''}) {
 final class FakeServer {
   FakeServer() {
     members.addAll([
-      {'id': 'm1', 'galley': 'g1', 'user': 'u1', 'alias': 'Owner', 'role': 'owner'},
-      {'id': 'm2', 'galley': 'g1', 'user': 'u2', 'alias': 'Rae', 'role': 'reviewer'},
+      {
+        'id': 'm1',
+        'galley': 'g1',
+        'user': 'u1',
+        'alias': 'Owner',
+        'role': 'owner',
+        'revoked': false,
+      },
+      {
+        'id': 'm2',
+        'galley': 'g1',
+        'user': 'u2',
+        'alias': 'Rae',
+        'role': 'reviewer',
+        'revoked': false,
+      },
     ]);
   }
 

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:galley_core/galley_core.dart';
 
+import 'membership.dart';
 import 'pocketbase.dart';
 import 'rows.dart';
 import 'sign_in.dart';
@@ -103,9 +104,9 @@ final class ServerGalley implements Galley {
     required String note,
     required String by,
   }) async {
-    final aliases = await _aliases();
-    final mine = aliases[session.userId];
-    if (mine == null) throw Refused.missing('${session.email} is not a member of this galley');
+    final members = await _members();
+    final aliases = _aliasesOf(members);
+    final mine = _mine(members).alias;
     if (by != mine) {
       throw Refused.invalid('${session.email} raises marks in this galley as $mine, not $by');
     }
@@ -164,7 +165,7 @@ final class ServerGalley implements Galley {
       sort: 'seq',
       token: _token,
     );
-    return _markOf(row, events, await _aliases());
+    return _markOf(row, events, _aliasesOf(await _members()));
   }
 
   // --- Reading -------------------------------------------------------------------------------
@@ -177,6 +178,9 @@ final class ServerGalley implements Galley {
       token: _token,
     );
     final rounds = [for (final r in rows) _RoundRecord.of(r)];
+    // No rounds is also what the server lists for someone who may not read them (a list rule
+    // filters; it does not refuse). It is said to be nothing only for a member.
+    if (rounds.isEmpty) _mine(await _members());
     for (final r in rounds) {
       _rounds[r.number] = r;
     }
@@ -190,7 +194,10 @@ final class ServerGalley implements Galley {
       filter: 'galley = ${_quoted(galleyId)} && finished = true && number = $n',
       token: _token,
     );
-    if (rows.isEmpty) throw Refused.missing('the galley has no finished round $n');
+    if (rows.isEmpty) {
+      _mine(await _members());
+      throw Refused.missing('the galley has no finished round $n');
+    }
     return _rounds[n] = _RoundRecord.of(rows.single);
   }
 
@@ -205,7 +212,7 @@ final class ServerGalley implements Galley {
   /// Every mark of the galley with its events, and the finished rounds.
   Future<({Map<String, _MarkRows> marks, List<_RoundRecord> rounds})> _everything() async {
     final galley = _quoted(galleyId);
-    final aliasesOf = _aliases();
+    final membersOf = _members();
     final finishedOf = _finishedRounds();
     final marksOf = server.list('marks', filter: 'round.galley = $galley', token: _token);
     final eventsOf = server.list(
@@ -217,13 +224,16 @@ final class ServerGalley implements Galley {
     // The four at once, through Future.wait: the record's `.wait` would hand a refusal on as a
     // ParallelWaitError, which nothing upstream reads (measured: a 401 on any one list did).
     // Future.wait throws the first error as it is and handles the rest.
-    await Future.wait([aliasesOf, finishedOf, marksOf, eventsOf]);
-    final (aliases, finished, marks, events) = (
-      await aliasesOf,
+    await Future.wait([membersOf, finishedOf, marksOf, eventsOf]);
+    final (members, finished, marks, events) = (
+      await membersOf,
       await finishedOf,
       await marksOf,
       await eventsOf,
     );
+    // As for the rounds: no marks is nothing only for a member.
+    _mine(members);
+    final aliases = _aliasesOf(members);
     final eventsByMark = <String, List<JsonMap>>{};
     for (final e in events) {
       (eventsByMark[JsonReader(e, 'an event').string('mark')] ??= []).add(e);
@@ -241,18 +251,29 @@ final class ServerGalley implements Galley {
     );
   }
 
+  /// The galley's members, as the signed-in user may list them: every one, revoked ones too,
+  /// for a member; only their own membership for one who was revoked.
+  Future<List<Member>> _members() =>
+      GalleyMembers(server, galleyId: galleyId, session: session).members();
+
   /// Each member's alias by user id: the `by` of everything they wrote. A revoked member is
   /// listed too, so what they wrote still says who wrote it.
-  Future<Map<String, String>> _aliases() async {
-    final rows = await server.list(
-      'members',
-      filter: 'galley = ${_quoted(galleyId)}',
-      token: _token,
-    );
-    return {
-      for (final m in rows)
-        JsonReader(m, 'a member').string('user'): JsonReader(m, 'a member').string('alias'),
-    };
+  static Map<String, String> _aliasesOf(List<Member> members) => {
+    for (final m in members) m.user: m.alias,
+  };
+
+  /// The signed-in user's membership, refused when they have none or it was revoked: what the
+  /// server lists them then is empty, and must not be read as an empty galley.
+  Member _mine(List<Member> members) {
+    final mine = members.where((m) => m.user == session.userId).firstOrNull;
+    if (mine == null) throw Refused.missing('${session.email} is not a member of this galley');
+    if (mine.revoked) {
+      throw Refused.missing(
+        '${session.email}\'s access to this galley was revoked by its owner; what they wrote '
+        'is kept',
+      );
+    }
+    return mine;
   }
 
   /// A mark row and its event rows as the core's [Mark], through the reader the validator

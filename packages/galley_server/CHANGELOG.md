@@ -26,3 +26,13 @@ The first release of the package (DESIGN D15):
   sent again, and every refusal in PocketBase's words as the `Refused` kind its status names.
   An answer that is not JSON, or no answer, is refused, never read as nothing.
 - `SignIn`: a code requested for an email, and the `Session` it signs in.
+- `Member`, `MemberRole`, `GalleyMembers` and `ServerAccount`: a galley made with its owner's
+  membership in one batch, an invite, a join by it under an alias, the user's memberships and
+  open invites, and a reviewer revoked or restored by the owner.
+- `RoundPush`: a rendered round pushed as its owner. Created with its manifest, its files
+  uploaded eight at a time (each checked against its SHA-256 before it is sent), every mark
+  carried, and finished with those placements, tried again when a mark was raised under it. An
+  unfinished round an earlier push left is finished by a push of the same files, uploading only
+  what is missing; a push of other files is refused while it stands, naming it.
+- `ServerGalley` tells a revoked member their access was revoked, and a non-member that they
+  are not one, rather than showing either an empty galley.

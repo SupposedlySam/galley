@@ -2,7 +2,9 @@
 /// core's marks and events.
 library;
 
-export 'src/rows.dart';
+export 'src/membership.dart';
 export 'src/pocketbase.dart';
+export 'src/round_push.dart';
+export 'src/rows.dart';
 export 'src/server_galley.dart';
 export 'src/sign_in.dart';
