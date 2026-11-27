@@ -55,22 +55,14 @@ final class LocalGalley implements Galley {
     required String by,
   }) async {
     final n = latestRound();
-    final found = (await directory.readRound(n)).round.frame(frame);
-    if (found == null) throw Refused.invalid('round $n has no frame $frame');
-    final tree = found.tree;
-    if (tree == null) {
-      throw Refused.conflict('frame $frame in round $n has no tree to pin a widget of');
-    }
-    final WidgetNode node;
-    final PinOffset pin;
-    try {
-      (:node, :pin) = target.resolve(tree);
-    } on PinMissed catch (e) {
-      throw Refused.invalid('${e.message} in frame $frame');
-    }
-    if (markNoteRefusal(note) case final why?) throw Refused.invalid(why);
-    if (by.trim().isEmpty) throw const Refused.invalid('a mark says who raised it');
-
+    final (:node, :pin) = raiseTarget(
+      (await directory.readRound(n)).round,
+      n,
+      frame: frame,
+      target: target,
+      note: note,
+      by: by,
+    );
     final mark = Mark(
       id: newId(),
       frame: frame,

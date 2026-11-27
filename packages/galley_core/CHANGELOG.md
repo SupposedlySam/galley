@@ -4,6 +4,13 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.9 (unreleased)
+
+- `raiseTarget`: the widget a new mark pins in a round's frame, and where on it, or the refusal
+  of the mark (no such frame, no tree, a miss, a blank note, nobody raising it). Every
+  `Galley.raise` asks it before writing, so a mark raised on this machine and one raised on a
+  server are refused for the same reasons, in the same words. `LocalGalley.raise` now does.
+
 ## 0.3.8
 
 For the canvas, which reads rounds and marks through these rather than working them out again

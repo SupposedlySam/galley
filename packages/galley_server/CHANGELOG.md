@@ -16,3 +16,13 @@ The first release of the package (DESIGN D15):
 - `lib/pocketbase`: the schema (`pb_migrations`) and hooks (`pb_hooks`). They are written for
   PocketBase 0.40.6, and `galley host` runs them. Nothing is deleted, every write is judged in
   a transaction of its own, and sign-in is by a code mailed to an invited email.
+- `ServerGalley`, the `Galley` of a galley on a server: its finished rounds, each file checked
+  against its manifest's SHA-256 (a mismatch is refused as damaged, naming the file), a file's
+  URL for the canvas, every mark where it was last placed with its history, and raising and
+  recording as the signed-in member, refused before anything is sent for what the core refuses.
+  Lists are scoped to the galley, since the server's rules check membership, and a member of
+  two galleys can read both.
+- `PocketBase`, the REST client it speaks through: every page of a list, a 429 waited out and
+  sent again, and every refusal in PocketBase's words as the `Refused` kind its status names.
+  An answer that is not JSON, or no answer, is refused, never read as nothing.
+- `SignIn`: a code requested for an email, and the `Session` it signs in.

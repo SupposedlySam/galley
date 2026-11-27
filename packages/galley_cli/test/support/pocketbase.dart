@@ -10,6 +10,16 @@ export 'package:galley_cli/src/rest.dart' show Answer, Multipart, messageOf;
 // schema's rules and hooks, so they send exactly the requests a client could, not what one
 // particular client chooses to.
 
+/// The cache `galley host` uses on this machine, so the suite fetches nothing a user already
+/// has. Rejected: a fresh cache per run. Every run would download 13 MB and compile the
+/// validator again.
+final cache = ArchiveCache(
+  cacheDirectory(Platform.environment) ?? (throw StateError('set GALLEY_CACHE, or HOME')),
+  fetch: httpFetch,
+);
+
+Future<LocalServer> host(String data) => LocalServer.start(data: data, cache: cache, port: 0);
+
 /// A signed-in user of [server].
 final class As {
   As._(this.server, this.email, this.id, this._token);

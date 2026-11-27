@@ -16,16 +16,6 @@ import 'support/pocketbase.dart';
 // LocalServer, with the validator it compiles. The first run fetches PocketBase into the
 // galley cache, as `galley host` does; later runs find it there.
 
-/// The cache `galley host` uses on this machine, so the suite fetches nothing a user already
-/// has. Rejected: a fresh cache per run. Every run would download 13 MB and compile the
-/// validator again.
-final cache = ArchiveCache(
-  cacheDirectory(Platform.environment) ?? (throw StateError('set GALLEY_CACHE, or HOME')),
-  fetch: httpFetch,
-);
-
-Future<LocalServer> host(String data) => LocalServer.start(data: data, cache: cache, port: 0);
-
 /// [path]'s permission bits, as `stat` shows them: `rwx------`.
 String modeOf(String path) => FileStat.statSync(path).modeString().substring(0, 9);
 

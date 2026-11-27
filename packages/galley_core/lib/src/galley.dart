@@ -4,6 +4,8 @@ import 'frame_tree.dart';
 import 'json.dart';
 import 'mark.dart';
 import 'pin.dart';
+import 'refused.dart';
+import 'write_rules.dart';
 import 'round.dart';
 import 'stored_round.dart';
 
@@ -119,4 +121,36 @@ Future<JsonMap> _item(
     'image': image == null ? null : name(n!, image),
     'mark': p.mark.toJson(),
   };
+}
+
+/// The widget [target] names in [frame] of [round] (round number [n]), and where on it a new
+/// mark saying [note] by [by] is pinned; refused, with the reason, when the mark cannot be.
+///
+/// Every [Galley.raise] asks this before it writes anything, so a mark raised on this machine
+/// and one raised on a server are refused for the same reasons in the same words. Rejected:
+/// leaving the server to judge the pin alone, which it can only do by reading the round's
+/// trees in a hook, on every mark.
+({WidgetNode node, PinOffset pin}) raiseTarget(
+  Round round,
+  int n, {
+  required FrameKey frame,
+  required PinTarget target,
+  required String note,
+  required String by,
+}) {
+  final found = round.frame(frame);
+  if (found == null) throw Refused.invalid('round $n has no frame $frame');
+  final tree = found.tree;
+  if (tree == null) {
+    throw Refused.conflict('frame $frame in round $n has no tree to pin a widget of');
+  }
+  final ({WidgetNode node, PinOffset pin}) resolved;
+  try {
+    resolved = target.resolve(tree);
+  } on PinMissed catch (e) {
+    throw Refused.invalid('${e.message} in frame $frame');
+  }
+  if (markNoteRefusal(note) case final why?) throw Refused.invalid(why);
+  if (by.trim().isEmpty) throw const Refused.invalid('a mark says who raised it');
+  return resolved;
 }

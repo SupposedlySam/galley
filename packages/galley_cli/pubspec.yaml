@@ -28,5 +28,7 @@ dependencies:
     path: ../galley_server
 
 dev_dependencies:
+  # galley_server's client is tested against the server `galley host` runs.
+  http: ^1.6.0
   lints: ^6.0.0
   test: ^1.26.0

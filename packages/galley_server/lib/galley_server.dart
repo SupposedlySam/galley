@@ -3,3 +3,6 @@
 library;
 
 export 'src/rows.dart';
+export 'src/pocketbase.dart';
+export 'src/server_galley.dart';
+export 'src/sign_in.dart';

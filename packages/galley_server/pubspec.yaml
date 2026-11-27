@@ -16,8 +16,10 @@ executables:
 
 dependencies:
   # Never Flutter (docs/DESIGN.md D1): the canvas uses this client, and so does the CLI.
+  crypto: ^3.0.6
   galley_core:
     path: ../galley_core
+  http: ^1.6.0
 
 dev_dependencies:
   lints: ^6.0.0

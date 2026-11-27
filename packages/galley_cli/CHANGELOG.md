@@ -28,6 +28,10 @@ A Galley server on this machine (DESIGN D15):
   sent at once land once. The first run fetches PocketBase.
 - The superuser's password is passed after `--`, so one that starts with `-` (1 in 32 of them)
   is not read as a flag.
+- `galley_server`'s `ServerGalley` is tested against that server: a reviewer signed in by a
+  code reads a pushed round and its image, raises a mark, is refused a verify before an answer,
+  and verifies once the owner has answered; the next round carries the mark, and its history is
+  the owner's answer and the reviewer's verify.
 
 ## 0.3.8
 
