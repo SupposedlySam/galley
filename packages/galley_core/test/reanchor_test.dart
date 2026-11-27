@@ -92,6 +92,70 @@ void main() {
     });
   });
 
+  group('a mark raised on a round before 0.3.9', () {
+    // Its anchor keeps the absolute file:// URI the compiler recorded; rounds since record the
+    // file inside the package.
+    SourceLocation old(int line, [String file = 'lib/screen.dart']) =>
+        SourceLocation('file:///home/owner/dev/app/$file', line, 5);
+    SourceLocation now(int line, [String file = 'lib/screen.dart']) =>
+        SourceLocation(file, line, 5);
+
+    test('is found by its call site in a round that records the file inside the package', () {
+      final before = node([2], 'TextButton', label: 'Details', at: old(40));
+      final after = tree([
+        root,
+        node([0], 'TextButton', label: 'Details', at: now(20)),
+        node([1], 'TextButton', label: 'Details', at: now(40, 'lib/other.dart')),
+        node([2], 'TextButton', label: 'Details', at: now(40)),
+      ]);
+      final r = located(reanchorer.locate(Anchor.of(before), after));
+      expect(r.node.indexPath, [2]);
+      expect(r.decidedBy, Evidence.location);
+    });
+
+    test('is found by its file and type when the lines shifted', () {
+      final before = node([1], 'Image', at: old(12));
+      final after = tree([
+        root,
+        node([0], 'Image', at: now(15, 'lib/xscreen.dart')),
+        node([1], 'Image', at: now(15)),
+        node([2], 'Image', at: now(3, 'lib/other.dart')),
+      ]);
+      final r = located(reanchorer.locate(Anchor.of(before), after));
+      expect(r.node.indexPath, [1]);
+      expect(r.decidedBy, Evidence.fileAndType);
+    });
+
+    test('names the same file only where the absolute path ends in the relative one', () {
+      final cases = {
+        ('file:///home/owner/dev/app/lib/screen.dart', 'lib/screen.dart'): true,
+        ('lib/screen.dart', 'file:///home/owner/dev/app/lib/screen.dart'): true,
+        ('/home/owner/dev/app/lib/screen.dart', 'lib/screen.dart'): true,
+        (r'C:\dev\app\lib\screen.dart', 'lib/screen.dart'): true,
+        ('file:///home/my%20dev/app/lib/a%20b.dart', 'lib/a b.dart'): true,
+        ('lib/screen.dart', 'lib/screen.dart'): true,
+        ('file:///home/owner/dev/app/lib/xscreen.dart', 'lib/screen.dart'): false,
+        ('file:///home/owner/dev/app/xlib/screen.dart', 'lib/screen.dart'): false,
+        ('file:///a/app/lib/screen.dart', 'file:///b/app/lib/screen.dart'): false,
+        ('lib/screen.dart', 'test/screen.dart'): false,
+        ('package:app/screen.dart', 'screen.dart'): false,
+        ('file:///a/app/lib/screen.dart', 'package:app/screen.dart'): false,
+      };
+      expect(cases.values.where((same) => same), hasLength(6));
+      for (final MapEntry(key: (a, b), value: same) in cases.entries) {
+        expect(
+          SourceLocation(a, 1, 1).sameFile(SourceLocation(b, 1, 1)),
+          same,
+          reason: '$a and $b',
+        );
+      }
+      const site = SourceLocation('lib/a.dart', 3, 4);
+      expect(site.sameSite(const SourceLocation('file:///app/lib/a.dart', 3, 4)), isTrue);
+      expect(site.sameSite(const SourceLocation('file:///app/lib/a.dart', 3, 5)), isFalse);
+      expect(site.sameSite(const SourceLocation('file:///app/lib/a.dart', 2, 4)), isFalse);
+    });
+  });
+
   group('lost', () {
     test('candidates no evidence can split are Lost with all of them, not the first', () {
       // Two cards from one call site, and the anchor's path no longer exists (a card was

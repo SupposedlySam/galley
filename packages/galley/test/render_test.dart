@@ -65,7 +65,7 @@ void main() {
 
   FrameRenderer renderer(GalleyHost host, Duration? mountBudget) => FrameRenderer(
     host: host,
-    recorder: TreeRecorder(roots: ['${_cwd()}/test/support']),
+    recorder: TreeRecorder(packageRoot: _cwd(), sourceRoots: ['test/support']),
     fonts: fonts,
     mountBudget: mountBudget ?? FrameRenderer.defaultMountBudget,
   );
@@ -104,7 +104,9 @@ void main() {
     expect(types, isNot(contains('RichText')));
     expect(types, isNot(contains('ToyApp')));
     final where = o.tree!.nodes.singleWhere((n) => n.key == "[<'where'>]");
-    expect(where.location!.file, endsWith('test/support/toy_app.dart'));
+    // Inside the package, never the machine's path: a reviewer reads it, and another checkout
+    // of the app must record the same location.
+    expect(where.location!.file, 'test/support/toy_app.dart');
     // Pixel 7: 1080 × 2400 physical.
     expect((o.pixels!.width, o.pixels!.height), (1080, 2400));
     expect(o.tree!.bounds.width, closeTo(411.43, 0.01));

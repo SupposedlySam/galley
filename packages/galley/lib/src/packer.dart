@@ -46,7 +46,7 @@ void galley(GalleyHost host) {
     final cwd = Directory.current.path;
     renderer = FrameRenderer(
       host: host,
-      recorder: TreeRecorder(roots: [for (final r in host.sourceRoots) '$cwd/$r']),
+      recorder: TreeRecorder(packageRoot: cwd, sourceRoots: host.sourceRoots),
       fonts: fonts,
     );
     if (out != null) {

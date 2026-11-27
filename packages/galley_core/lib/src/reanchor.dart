@@ -80,7 +80,8 @@ final class LocationMatcher implements AnchorMatcher {
   bool appliesTo(Anchor anchor) => anchor.location != null;
 
   @override
-  bool matches(Anchor anchor, WidgetNode node) => node.location == anchor.location;
+  bool matches(Anchor anchor, WidgetNode node) =>
+      node.location?.sameSite(anchor.location!) ?? false;
 }
 
 /// Matches by creation file and widget type, ignoring line and column.
@@ -96,7 +97,7 @@ final class FileAndTypeMatcher implements AnchorMatcher {
 
   @override
   bool matches(Anchor anchor, WidgetNode node) =>
-      node.type == anchor.type && node.location?.file == anchor.location!.file;
+      node.type == anchor.type && (node.location?.sameFile(anchor.location!) ?? false);
 }
 
 /// Matches by index path and widget type.

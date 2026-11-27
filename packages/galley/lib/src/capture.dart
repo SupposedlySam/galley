@@ -20,12 +20,19 @@ import 'package:galley_core/galley_core.dart';
 /// **The root** is synthetic: a `Frame` node covering the whole view, with path `[]`. The app's
 /// outermost recorded widgets are its children. A pin on bare background anchors to it.
 final class TreeRecorder {
-  /// A recorder that keeps widgets constructed under [roots], which are absolute directory
-  /// paths. Packages in the pub cache and the Flutter SDK are never kept, even when a root
-  /// contains them.
-  TreeRecorder({required List<String> roots}) : roots = List.unmodifiable(roots);
+  /// A recorder that keeps widgets constructed under [sourceRoots], directories relative to
+  /// [packageRoot], the absolute path of the package `flutter test` runs in. Packages in the pub
+  /// cache and the Flutter SDK are never kept, even when a root contains them.
+  TreeRecorder({required String packageRoot, required List<String> sourceRoots})
+    : this._(packageRoot.endsWith('/') ? packageRoot : '$packageRoot/', sourceRoots);
 
-  /// The source directories whose widgets count as the app's.
+  TreeRecorder._(this.packageRoot, List<String> sourceRoots)
+    : roots = List.unmodifiable([for (final r in sourceRoots) '$packageRoot$r']);
+
+  /// The package's absolute path, ending in `/`.
+  final String packageRoot;
+
+  /// The source directories whose widgets count as the app's, as absolute paths.
   final List<String> roots;
 
   /// The type name of the synthetic root.
@@ -84,12 +91,25 @@ final class TreeRecorder {
       rect: LogicalRect(rect.left, rect.top, rect.width, rect.height),
       key: stableKey(element.widget.key),
       semanticsLabel: _semanticsLabel(box),
-      location: SourceLocation(location.file, location.line, location.column),
+      location: SourceLocation(_relative(location.file), location.line, location.column),
     );
   }
 
+  /// [file] as a path inside the package, `lib/…`, since a kept widget's file is always under
+  /// [packageRoot].
+  ///
+  /// The compiler records an absolute `file://` URI. Kept as it is, it would put the owner's
+  /// home directory in every round a reviewer reads (ROADMAP step 6), and it would differ between
+  /// two checkouts of one app, so a round rendered on another machine could never match a mark by
+  /// its location. Rejected: making it relative when the round is pushed. The local galley would
+  /// keep the machine's paths, and the server's rounds would disagree with the local ones.
+  String _relative(String file) => _path(file).substring(packageRoot.length).replaceAll(r'\', '/');
+
+  static String _path(String file) =>
+      file.startsWith('file://') ? Uri.parse(file).toFilePath() : file;
+
   bool _isAppSource(String file) {
-    final path = file.startsWith('file://') ? Uri.parse(file).toFilePath() : file;
+    final path = _path(file);
     if (path.contains('/.pub-cache/') || path.contains('/packages/flutter/lib/')) return false;
     return roots.any((r) => path.startsWith(r.endsWith('/') ? r : '$r/'));
   }

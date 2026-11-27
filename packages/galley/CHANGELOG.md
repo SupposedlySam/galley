@@ -6,7 +6,10 @@ patch (DESIGN D8).
 
 ## 0.3.9 (unreleased)
 
-- No changes. Released with `galley_core`, `galley_cli` and `galley_server` 0.3.9 (DESIGN D8).
+- A widget's source location is recorded as a path inside the app's package
+  (`lib/screens/home.dart`), not the absolute `file://` URI the compiler records. A round no
+  longer carries the machine's paths to its reviewers, and two checkouts of an app record the
+  same location (DESIGN D6). `pull --json` lists it the same way: relative to the app's root.
 
 ## 0.3.8
 

@@ -15,6 +15,8 @@ Paths are under the SDK's `packages/`.
 - The public accessor is `dart:developer`'s `CreationLocation.of(widget)`, with fields `file`
   (a `file:///` URI), `line` and `column` (`bin/cache/dart-sdk/lib/developer/creation_tracking.dart:45-70`).
   The framework's private `_getCreationLocation` uses it (`flutter/lib/src/widgets/widget_inspector.dart:4358`).
+  Galley records the file relative to the package `flutter test` runs in (DESIGN D6), so the
+  absolute URI is read once, by the recorder.
 - **The transform skips constructors with optional positional parameters**, so `of` returns
   null for them (`creation_tracking.dart:~34-42`). An anchor must not require a creation
   location.

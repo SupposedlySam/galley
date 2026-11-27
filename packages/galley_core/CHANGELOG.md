@@ -10,6 +10,9 @@ patch (DESIGN D8).
   of the mark (no such frame, no tree, a miss, a blank note, nobody raising it). Every
   `Galley.raise` asks it before writing, so a mark raised on this machine and one raised on a
   server are refused for the same reasons, in the same words. `LocalGalley.raise` now does.
+- `SourceLocation.sameFile` and `sameSite`. The location matchers use them, so a mark raised on
+  a round that recorded absolute `file://` locations is still carried by its location into a
+  round that records them inside the package (DESIGN D6).
 
 ## 0.3.8
 
