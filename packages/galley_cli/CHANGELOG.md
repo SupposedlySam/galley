@@ -4,6 +4,20 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.4
+
+Fixes from the first app to run `pack`:
+
+- `galley pack -- <args>` passes the args to `flutter test`, so a galley test skipped by its
+  tag runs with `-- --run-skipped`. Before, `pack` could not run it at all.
+- A `--flutter` that is not an executable (`"fvm flutter"`) is refused with exit 1 and says to
+  give one executable, instead of crashing with exit 255.
+- A refused event says the verb: "cannot be answered now", not "cannot be answer now".
+- `pull --json` image paths are normalized: no `/./` when `--app` is `.`.
+- `LocalGalley`, the service under the commands (raise, record, work items), is public, for
+  `galley serve` to share. A blank note given to `mark` is now refused with exit 1, as the
+  service refuses it, not 64.
+
 ## 0.3.3
 
 - First release. The `galley` command keeps a galley in `.galley/` (DESIGN D12): `pack` runs

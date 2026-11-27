@@ -1,7 +1,7 @@
 # Galley
 
 > Galley renders every screen × state × device of a Flutter app as a frame, from inside the
-> app's own `flutter test`, for design review. Version 0.3.3 is the local loop: the renderer writes a round
+> app's own `flutter test`, for design review. Version 0.3.4 is the local loop: the renderer writes a round
 > of PNGs, widget trees, frame records and the round's provenance to disk, and `galley_cli` keeps
 > rounds and marks in a local `.galley/`, carrying every mark into the next round. The review
 > canvas and server are not built yet (docs/ROADMAP.md).

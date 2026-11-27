@@ -4,7 +4,7 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.3, the local loop.** Galley renders and records a round of frames from inside an
+**Status: 0.3.4, the local loop.** Galley renders and records a round of frames from inside an
 app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local galley: pack,
 mark, pull, answer, verify, with every mark carried into the next round. The canvas and the
 server that reviewers use are not built yet ([the plan](docs/ROADMAP.md)).
@@ -25,7 +25,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.3
+      ref: v0.3.4
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -103,7 +103,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley_cli
-      ref: v0.3.3
+      ref: v0.3.4
 ```
 
 Add `.galley/` to `.gitignore`. Otherwise the earlier rounds make every later round look as if
@@ -119,7 +119,11 @@ dart run galley_cli:galley verify <mark> --by me   # or: reopen <mark> --note '.
 
 `pack` runs `flutter test test/galley_test.dart` (`--test` to change it) and prints how many
 frames rendered, the commit, and where every mark landed: exact, moved, lost, unplaced or
-retired. `--by` defaults to `GALLEY_BY`. Reviewers will mark on the canvas; `mark` is for the
+retired. Whatever follows `--` goes to `flutter test`, so a galley test skipped by its tag (above)
+is packed with `galley pack -- --run-skipped`. `--flutter` names one executable, not a command:
+under fvm, give the absolute path of its `flutter`. `pull` lists what waits on an answer;
+`pull --all` adds the answered marks waiting on a reviewer, and the closed ones. `--by` defaults
+to `GALLEY_BY`. Reviewers will mark on the canvas; `mark` is for the
 app's owner and for tests.
 
 ## What a round contains

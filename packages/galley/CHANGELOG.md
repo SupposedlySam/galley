@@ -4,6 +4,10 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.4
+
+- No changes. Released with `galley_cli` 0.3.4 (DESIGN D8).
+
 ## 0.3.3
 
 - No change to the renderer. Released with `galley_cli` 0.3.3, which runs this package's galley
