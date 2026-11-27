@@ -1,0 +1,35 @@
+name: galley_web
+description: "The canvas: every frame of a round in its device, with the marks pinned to it."
+version: 0.3.8
+# An app, not a library: it ships built, with galley_cli (docs/DESIGN.md D14).
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+  flutter: ">=3.50.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  galley_core:
+    path: ../galley_core
+  http: ^1.6.0
+  material_ui: ^1.11.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  # Bundled, not fetched: the canvas loads nothing from outside its own server (DESIGN D14).
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: fonts/Roboto-Regular.ttf
+        - asset: fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: fonts/Roboto-Bold.ttf
+          weight: 700
