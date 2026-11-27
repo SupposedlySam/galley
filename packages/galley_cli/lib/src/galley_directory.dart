@@ -125,7 +125,16 @@ final class GalleyDirectory {
     final f = File('${roundPath(n)}/placements.json');
     if (!f.existsSync()) return null;
     final byId = {for (final m in marks()) m.id: m};
-    return _read(f, (json, context) => Placements.fromJson(json, context, (id) => byId[id]));
+    // Naming both files: the one that refers to the mark, and the one to put back. The core's
+    // FormatException names only the first, which is all a pure reader knows (seen on the first
+    // adopting app, whose owner had to work out that the missing file was the mark's).
+    Mark markOf(String id) =>
+        byId[id] ??
+        (throw Refused.damaged(
+          'the galley does not hold together: ${f.path} places mark "$id", and there is no '
+          'mark "$id": ${_markFile(id)} is not there',
+        ));
+    return _read(f, (json, context) => Placements.fromJson(json, context, markOf));
   }
 
   /// Reads every mark and every round's placements, and returns. Refused, naming the file,

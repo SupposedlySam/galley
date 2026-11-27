@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:galley_core/galley_core.dart';
 
+import 'canvas.dart';
 import 'local_galley.dart';
 import 'refused.dart';
 
@@ -19,7 +20,7 @@ import 'refused.dart';
 ///                                   "at": [x, y], "note", "by"}
 ///                                   -> 201 {"mark", "status", "node", "round"}
 /// POST /api/marks/<id>/events       a MarkEvent's JSON without "at" -> 200 {"mark", "status"}
-/// GET  /<path>                      the canvas's files from `web`, when it is given
+/// GET  /<path>                      the canvas's files, when there is one (DESIGN D14)
 /// ```
 ///
 /// Every error is {"error"}: a malformed request 400, a well-formed one that means something
@@ -35,9 +36,10 @@ import 'refused.dart';
 /// request says (`by`), as it is for the commands: whoever can reach this socket can already
 /// write the galley's files.
 final class GalleyServer {
-  GalleyServer._(this._servers, this._local, this._web);
+  GalleyServer._(this._servers, this._local, this._canvas);
 
-  /// Serves [local] on loopback at [port] (0 picks a free one), and the canvas from [web].
+  /// Serves [local] on loopback at [port] (0 picks a free one), and [canvas] at `/`: a build's
+  /// files, or a 404 that says why there is none.
   ///
   /// On `127.0.0.1` and, at the same port, `::1`: a client that resolves `localhost` to `::1`
   /// first and does not fall back would otherwise find nothing. A machine with no IPv6
@@ -45,7 +47,11 @@ final class GalleyServer {
   ///
   /// Every mark and every round's placements are read first, and a galley that does not hold
   /// together is refused here, naming the file, rather than at the first POST.
-  static Future<GalleyServer> start(LocalGalley local, {int port = 0, String? web}) async {
+  static Future<GalleyServer> start(
+    LocalGalley local, {
+    int port = 0,
+    CanvasSource canvas = const NoCanvas('serve was started without one'),
+  }) async {
     local.directory.check();
     final v4 = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     final servers = [v4];
@@ -57,7 +63,7 @@ final class GalleyServer {
         rethrow;
       }
     }
-    final s = GalleyServer._(servers, local, web);
+    final s = GalleyServer._(servers, local, canvas);
     for (final server in servers) {
       server.listen(s._handle);
     }
@@ -70,7 +76,7 @@ final class GalleyServer {
 
   final List<HttpServer> _servers;
   final LocalGalley _local;
-  final String? _web;
+  final CanvasSource _canvas;
 
   /// The largest request body read. A mark is a note and a pin; a megabyte is far past one.
   static const maxBody = 1 << 20;
@@ -143,6 +149,14 @@ final class GalleyServer {
             at: (x: x.toDouble(), y: y.toDouble()),
           ),
           (null, [final num x, final num y]) => AtPoint(x.toDouble(), y.toDouble()),
+          // A mark's `pin` comes back as {"dx", "dy"}, and the first adopting app sent that as
+          // "at". Said, not accepted: a pin is a fraction of its widget, which the server works
+          // out from where in the frame the click was. Rejected: taking either shape, two ways to
+          // say one thing, one of which cannot be checked against the widget's box.
+          (_, Map<String, Object?>()) => throw const FormatException(
+            'request.at: [x, y] in the frame\'s logical pixels, not a pin\'s {"dx", "dy"}: the '
+            'pin, a fraction of the widget, is worked out from it',
+          ),
           _ => throw const FormatException(
             'request: give "node": [0, 1], "at": [x, y], or both (the widget, and where in it)',
           ),
@@ -195,8 +209,10 @@ final class GalleyServer {
       Uri(pathSegments: ['', 'api', 'rounds', '$round', ...image.split('/')]).toString();
 
   Future<void> _static(HttpRequest request, List<String> path) async {
-    final web = _web;
-    if (web == null) throw const _Status(404, 'no canvas here: serve was started without --web');
+    final web = switch (_canvas) {
+      CanvasAt(:final directory) => directory,
+      NoCanvas(:final why) => throw _Status(404, 'no canvas here: $why'),
+    };
     if (request.method != 'GET') throw _Status(405, '${request.method} is not allowed here');
     await _file(request.response, web, path.isEmpty || path.last.isEmpty ? ['index.html'] : path);
   }

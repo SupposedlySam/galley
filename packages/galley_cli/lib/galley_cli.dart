@@ -2,6 +2,7 @@
 /// answers (docs/DESIGN.md D12).
 library;
 
+export 'src/canvas.dart';
 export 'src/cli.dart' show GalleyContext, runGalley;
 export 'src/galley_directory.dart' show GalleyDirectory;
 export 'src/galley_server.dart';

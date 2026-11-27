@@ -6,6 +6,7 @@ import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:galley_core/galley_core.dart';
 
+import 'canvas.dart';
 import 'galley_directory.dart';
 import 'galley_server.dart';
 import 'local_galley.dart';
@@ -23,13 +24,17 @@ final class GalleyContext {
     MakeRenderer? renderer,
     Map<String, String>? environment,
     Future<void> Function()? untilStopped,
+    Fetch? fetch,
+    PinnedCanvas? canvas,
   }) : out = out ?? stdout,
        err = err ?? stderr,
        now = now ?? DateTime.now,
        newId = newId ?? _randomId,
        renderer = renderer ?? FlutterTestRenderer.new,
        environment = environment ?? Platform.environment,
-       untilStopped = untilStopped ?? _untilSignalled;
+       untilStopped = untilStopped ?? _untilSignalled,
+       fetch = fetch ?? httpFetch,
+       canvas = canvas ?? pinnedCanvas;
 
   /// Where results go.
   final StringSink out;
@@ -46,11 +51,17 @@ final class GalleyContext {
   /// What renders a round for `pack`.
   final MakeRenderer renderer;
 
-  /// Read for `GALLEY_BY`.
+  /// Read for `GALLEY_BY`, and for where the canvas is cached (`GALLEY_CACHE`, `HOME`, ...).
   final Map<String, String> environment;
 
   /// Completes when `serve` should stop: on Ctrl-C, or on SIGTERM where there is one.
   final Future<void> Function() untilStopped;
+
+  /// How `serve` downloads the canvas it has not cached.
+  final Fetch fetch;
+
+  /// The canvas `serve` serves when it is not given `--web`.
+  final PinnedCanvas canvas;
 
   static Future<void> _untilSignalled() => Future.any([
     ProcessSignal.sigint.watch().first,
@@ -213,7 +224,7 @@ final class _Pack extends _GalleyCommand {
       )
       ..writeln(_placementCounts(carried));
     for (final p in carried) {
-      c.out.writeln('  ${p.mark.id}  ${placementName(p.placement)}  ${p.mark.frame}');
+      c.out.writeln('  ${p.mark.id}  ${p.placement.name}  ${p.mark.frame}');
     }
     if (exit != 0) {
       c.out.writeln(
@@ -244,7 +255,7 @@ final class _Pack extends _GalleyCommand {
       for (final k in ['exact', 'moved', 'lost', 'unplaced', 'retired']) k: 0,
     };
     for (final c in carried) {
-      counts.update(placementName(c.placement), (v) => v + 1, ifAbsent: () => 1);
+      counts.update(c.placement.name, (v) => v + 1, ifAbsent: () => 1);
     }
     return 'Marks: ${carried.length} carried. '
         '${counts.entries.map((e) => '${e.value} ${e.key}').join(', ')}.';
@@ -442,7 +453,13 @@ final class _Serve extends _GalleyCommand {
         help: 'The loopback port. 0 picks a free one.',
         valueHelp: 'n',
       )
-      ..addOption('web', help: 'The built canvas to serve at /.', valueHelp: 'dir');
+      ..addOption(
+        'web',
+        help:
+            'A built canvas to serve at /, in place of the release\'s. For working on the '
+            'canvas itself.',
+        valueHelp: 'dir',
+      );
   }
 
   /// Fixed, so the canvas's address is the same every time and can be bookmarked. Rejected:
@@ -463,21 +480,45 @@ final class _Serve extends _GalleyCommand {
     if (port == null || port < 0 || port > 65535) {
       throw UsageException('--port is 0 to 65535', usage);
     }
-    final web = _args.option('web');
-    if (web != null && !File('$web/index.html').existsSync()) {
-      throw Refused.invalid('$web has no index.html: give the canvas\'s build directory');
-    }
+    final canvas = await _canvas();
     final GalleyServer server;
     try {
-      server = await GalleyServer.start(local, port: port, web: web);
+      server = await GalleyServer.start(local, port: port, canvas: canvas);
     } on SocketException catch (e) {
       throw Refused.environment(
         'could not listen on port $port (${e.osError?.message ?? e.message})',
       );
     }
     c.out.writeln('Serving ${galley.path} at ${server.url}  (Ctrl-C stops it)');
+    if (canvas case NoCanvas(:final why)) {
+      // Said, not hidden (DESIGN D14): the API still answers, and the address alone would
+      // look like a canvas that failed to load.
+      c.err.writeln(
+        'galley: no canvas at ${server.url}: $why. The API is served; '
+        '`--web <dir>` serves a built canvas.',
+      );
+    }
     await c.untilStopped();
     await server.close();
     return 0;
+  }
+
+  /// `--web`'s build, else the pinned release's, from the cache or fetched into it.
+  Future<CanvasSource> _canvas() async {
+    if (_args.option('web') case final web?) {
+      if (!File('$web/index.html').existsSync()) {
+        throw Refused.invalid('$web has no index.html: give the canvas\'s build directory');
+      }
+      return CanvasAt(web);
+    }
+    final root = cacheDirectory(c.environment);
+    if (root == null) {
+      return const NoCanvas('there is nowhere to cache it: set GALLEY_CACHE, or HOME');
+    }
+    final (pin, cache) = (c.canvas, CanvasCache(root, fetch: c.fetch));
+    if (!File('${cache.directoryOf(pin)}/index.html').existsSync()) {
+      c.out.writeln('Fetching the canvas, ${pin.asset}, into $root (once)');
+    }
+    return cache.canvas(pin);
   }
 }

@@ -161,7 +161,7 @@ final class LocalGalley {
       'id': carried.mark.id,
       'status': carried.mark.status.name,
       'round': n,
-      'placement': placementName(carried.placement),
+      'placement': carried.placement.name,
       'where': carried.placement.toJson(),
       'anchor': carried.anchor.toJson(),
       'image': image == null ? null : name(n!, image),
@@ -212,12 +212,3 @@ final class AtNode extends PinTarget {
     (:final x, :final y) => '${path.join('.')} at $x,$y',
   };
 }
-
-/// The word a person reads for [p].
-String placementName(Placement p) => switch (p) {
-  Raised() => 'raised',
-  Reanchored(result: final Located l) => l.isExact ? 'exact' : 'moved',
-  Reanchored(result: Lost()) => 'lost',
-  Unplaced() => 'unplaced',
-  Retired() => 'retired',
-};

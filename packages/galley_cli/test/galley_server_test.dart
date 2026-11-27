@@ -27,7 +27,7 @@ void main() {
 
   Future<GalleyServer> serve({String? web}) => GalleyServer.start(
     LocalGalley(g, repository: dir.path, now: () => clock, newId: () => 'm${++ids}'),
-    web: web,
+    canvas: web == null ? const NoCanvas('it was not given one') : CanvasAt(web),
   );
 
   setUp(() async {
@@ -244,6 +244,22 @@ void main() {
         'is outside Card',
       ),
       ({...good}..remove('node'), 400, 'give "node"'),
+      (
+        {
+          ...good,
+          'at': {'dx': 0.5, 'dy': 0.5},
+        },
+        400,
+        'not a pin\'s {"dx", "dy"}',
+      ),
+      (
+        {
+          ...good,
+          'at': {'dx': 0.5, 'dy': 0.5},
+        }..remove('node'),
+        400,
+        'not a pin\'s {"dx", "dy"}',
+      ),
       ({...good}..remove('note'), 400, 'note'),
       (
         {
@@ -385,6 +401,7 @@ void main() {
           contains('does not hold together'),
           contains('rounds/1/placements.json'),
           contains('no mark "m1"'),
+          contains('marks/m1.json is not there'),
         ),
       );
       expect((await json('GET', '/api/marks')).$1, 500);
@@ -412,7 +429,7 @@ void main() {
         ], GalleyContext(out: StringBuffer(), err: err, environment: const {})),
         1,
       );
-      expect('$err', contains('rounds/1/placements.json'));
+      expect('$err', allOf(contains('rounds/1/placements.json'), contains('marks/m1.json')));
     });
 
     test('a round record that does not read, or is not there, is 500 too, naming it', () async {
@@ -449,7 +466,10 @@ void main() {
     expect((await json('GET', '/api/marks/m1/events')).$1, 405);
     expect((await json('POST', '/api/galley', body: {})).$1, 405);
     expect((await json('GET', '/api/nothing')).$1, 404);
-    expect((await json('GET', '/')).$1, 404, reason: 'no canvas without --web');
+    // Apart, not as one record: a record compares its map by identity.
+    final (code, body) = await json('GET', '/');
+    expect(code, 404);
+    expect(body, {'error': 'no canvas here: it was not given one'});
   });
 
   test('the canvas is served from web, and nothing outside it', () async {
