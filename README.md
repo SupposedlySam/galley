@@ -141,6 +141,28 @@ against the hash this release pins before it is unpacked (DESIGN D14). With no n
 first start, `serve` says there is no canvas and serves the API. `--web <dir>` serves another
 build.
 
+### A galley on a server
+
+For reviewers who are not at the owner's machine, a galley lives on a Galley server (DESIGN
+D15). `galley host` runs one on this machine, writing sign-in codes to a directory rather than
+mailing them; hosting one for others is not built yet.
+
+```sh
+dart run galley_cli:galley login <url> --email you@example.com   # asks for the mailed code
+dart run galley_cli:galley link <url> --create 'My app' --alias Sam
+dart run galley_cli:galley push                    # renders a round and pushes it
+dart run galley_cli:galley invite reviewer@example.com
+dart run galley_cli:galley members                 # or: revoke <alias> [--restore]
+```
+
+A reviewer runs `login`, then `link <url> --galley <id> --alias <name>`. While `.galley/` is
+linked, `mark`, `pull`, `answer`, `verify`, `reopen` and `withdraw` act on the server as your
+alias there: `--by` is refused and `GALLEY_BY` ignored. `pack` and `serve` are refused (the
+canvas does not read a server yet). A push that stops keeps its render in `.galley/push/`, and
+`galley push --resume` sends it. `.galley/server.json` names only the server and galley; the
+sign-in is kept in the user cache, readable by you alone. `galley unlink` goes back to the
+local galley, whose marks are not imported.
+
 ## What a round contains
 
 `GALLEY_OUT` gets `index.json`, `round.json` (the commit, whether the tree had uncommitted

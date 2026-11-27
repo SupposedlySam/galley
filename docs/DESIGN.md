@@ -30,9 +30,10 @@ packages/
   galley/          Flutter, test-time. GalleyHost + FrameSource contracts, built-in axes,
                    the packer. Depends on galley_core and flutter_test.
   galley_cli/      `galley pack | mark | pull | answer | verify | reopen | withdraw | serve` on a local galley
-                   (D12); `push` with the server. Depends on galley_core, never on Flutter.
-  galley_server/   planned (D15): the server's schema and hooks, the validator, and the
-                   client the CLI and canvas share. Depends on galley_core, never on Flutter.
+                   (D12); `login | link | push | invite | members | revoke | host` with a
+                   server (D15). Depends on galley_core and galley_server, never on Flutter.
+  galley_server/   the server's schema and hooks, the validator, and the client the CLI and
+                   canvas share (D15). Depends on galley_core, never on Flutter.
   galley_web/      the reviewer canvas (Flutter web, D14). Depends on galley_core.
 ```
 
@@ -188,6 +189,15 @@ frame missing from the new round is **retired**, with its history kept. Nothing 
     type.
   - File + type was added because a single line inserted above a widget breaks an exact
     location.
+- **A location is a file inside the app's package** (`lib/screens/home.dart:40:12`), since
+  0.3.9. Before, it was the absolute `file://` URI the compiler records, so every round put the
+  owner's home directory in front of whoever read it (ROADMAP step 6), and a round rendered in
+  another checkout of the app could never match a mark by location. The recorder makes it
+  relative to the package `flutter test` runs in. A mark raised on an older round keeps its
+  absolute anchor, since a mark is never changed, and the location matchers take an absolute
+  file as the same as a relative one when its path ends in `/` and the relative path
+  (`SourceLocation.sameFile`). Rejected: making it relative only when a round is pushed. The
+  local galley and the server would then record one widget two ways.
 - **Ambiguous is Lost, with its candidates.** If the evidence runs out with several nodes
   left, the result is Lost and lists them. It never picks the first.
 - **Index path needs the type too.** Rejected: a path alone. Some node sits at almost any path,
@@ -654,10 +664,19 @@ it cannot disagree with it.
   The hook refuses the finish unless every path in the manifest has a file and the placements
   name every mark raised on an earlier round. That check runs in the finish's own transaction,
   so a mark raised while the push ran makes the finish refused, and the push carries again.
-  A reader checks each file against the manifest's SHA-256 and names the one that differs. A
-  push that dies leaves an unfinished round that no reviewer reads, and the next push takes
-  the next number (D12). Rejected: placements as a file of the round. A finish could not check
-  a file, and a file is never replaced.
+  A reader checks each file against the manifest's SHA-256 and names the one that differs, and
+  the pusher checks each one before it is sent, since the server checks only the size. A push
+  that dies leaves an unfinished round that no reviewer reads. `galley push` keeps its render
+  in `.galley/push/`, and `galley push --resume` sends the same files again: the unfinished
+  round lists exactly them, so the push finishes it, uploading only what is missing. A push of
+  other files is refused while it stands, naming it. A finish refused while a new mark appeared
+  is carried and tried again, up to three times. What says a mark is new is the set of mark
+  ids, not the refusal's words, which are the server's to change. Rejected: placements as a
+  file of the round. A finish could not check a file, and a file is never replaced.
+  *Corrected 2026-11-27:* this said the next push takes the next number (D12). The server
+  numbers a round after the highest, finished or not, and an unfinished round can be neither
+  changed nor deleted, so a numbered-past round would leave a gap no reviewer could read.
+  Resuming is the way out; a round whose render was lost needs the server's superuser.
 - **A mark is raised on the newest finished round.** A raise on an older one is refused
   ("round 4 is out; reload"), so every mark the canvas shows is placed in the round on screen.
 - **Mail is never sent by accident.** With no SMTP configured, PocketBase sends mail with the
@@ -710,8 +729,13 @@ packages/galley_server/   what speaks the server's language. Depends on galley_c
 - **The commands follow the galley.** `galley link <url>` writes `.galley/server.json`. From
   then on `pull`, `answer`, `verify`, `reopen`, `withdraw` and `mark` act on the server as
   the signed-in user, and `push` replaces `pack`. In that mode `pack` and `--by` are refused,
-  not ignored. `galley login` signs in by emailed code. The token is kept in the user cache
-  directory, keyed by the server, never in `.galley/`, which may be committed (D12). The
+  not ignored, and `GALLEY_BY` is ignored, since it is set for the shell, not for one galley.
+  `serve` is refused too, until the canvas reads a server (0.3.10). `galley login` signs in by
+  emailed code. The token is kept in the user cache directory, one file per server, the
+  directory readable by the user alone (700, each file 600), never in `.galley/`, which may
+  be committed (D12). `galley invite`, `members` and `revoke` are the owner's; a reviewer joins
+  with `galley link <url> --galley <id> --alias <name>`. A revoked member is told so, never
+  shown an empty galley. The
   owner's agent uses the owner's token, so its answers carry the owner's alias, as `--by`
   does locally. The local marks and rounds stay where they are, unused, and `galley unlink`
   goes back to them. Not built: importing local marks. Their `by` names nobody on the
