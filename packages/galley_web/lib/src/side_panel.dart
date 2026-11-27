@@ -28,7 +28,10 @@ class SidePanel extends StatelessWidget {
     children: [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: _ReviewerField(model: model),
+        child: switch (model.signedIn) {
+          final s? => _SignedInAs(s),
+          null => _ReviewerField(model: model),
+        },
       ),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -45,6 +48,26 @@ class SidePanel extends StatelessWidget {
           null => MarkList(model: model, shown: shown, onShow: onShow),
         },
       ),
+    ],
+  );
+}
+
+/// Who a member on a server is reviewing as, and the way out.
+class _SignedInAs extends StatelessWidget {
+  const _SignedInAs(this.signedIn);
+
+  final SignedIn signedIn;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(
+          'Reviewing as ${signedIn.alias} (${signedIn.email})',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ),
+      TextButton(onPressed: signedIn.signOut, child: const Text('Sign out')),
     ],
   );
 }

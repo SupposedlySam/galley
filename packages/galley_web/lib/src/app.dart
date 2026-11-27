@@ -13,20 +13,24 @@ class GalleyCanvasApp extends StatelessWidget {
   final CanvasModel model;
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Galley',
-    debugShowCheckedModeBanner: false,
-    // Roboto is bundled (fonts/), not fetched: the canvas loads nothing from outside the
-    // machine it is served from (DESIGN D14), and on the web Flutter otherwise fetches Roboto
-    // from Google's font CDN when a page first draws text.
-    theme: ThemeData(
-      colorSchemeSeed: const Color(0xFF3D5A80),
-      brightness: Brightness.dark,
-      fontFamily: 'Roboto',
-    ),
-    home: CanvasPage(model: model),
-  );
+  Widget build(BuildContext context) => galleyApp(CanvasPage(model: model));
 }
+
+/// The canvas's app around [home]: its title and theme, the same for a galley on this machine
+/// and one on a server.
+Widget galleyApp(Widget home) => MaterialApp(
+  title: 'Galley',
+  debugShowCheckedModeBanner: false,
+  // Roboto is bundled (fonts/), not fetched: the canvas loads nothing from outside the
+  // machine it is served from (DESIGN D14), and on the web Flutter otherwise fetches Roboto
+  // from Google's font CDN when a page first draws text.
+  theme: ThemeData(
+    colorSchemeSeed: const Color(0xFF3D5A80),
+    brightness: Brightness.dark,
+    fontFamily: 'Roboto',
+  ),
+  home: home,
+);
 
 /// The board beside the panel, or why there is nothing to show.
 class CanvasPage extends StatefulWidget {

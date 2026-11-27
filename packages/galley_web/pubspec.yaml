@@ -14,8 +14,14 @@ dependencies:
     sdk: flutter
   galley_core:
     path: ../galley_core
+  # A galley on a server is read through the same client the CLI uses (docs/DESIGN.md D15).
+  # Pure Dart, so it builds for the web.
+  galley_server:
+    path: ../galley_server
   http: ^1.6.0
   material_ui: ^1.11.0
+  # The browser's localStorage, for a member's sign-in (browser_session_store.dart).
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:

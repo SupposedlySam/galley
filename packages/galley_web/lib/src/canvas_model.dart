@@ -13,10 +13,25 @@ final class CanvasModel extends ChangeNotifier {
   /// A canvas over [api], acting as [reviewer] (who marks are raised by).
   CanvasModel(this.api, {String reviewer = '', DateTime Function()? now})
     : _reviewer = reviewer.trim(),
+      signedIn = null,
+      _now = now ?? DateTime.now;
+
+  /// A canvas over a galley on a server, acting as the member [signedIn] is: the reviewer is
+  /// their alias, and is not changed here.
+  CanvasModel.signedIn(this.api, SignedIn this.signedIn, {DateTime Function()? now})
+    : _reviewer = signedIn.alias,
       _now = now ?? DateTime.now;
 
   /// Where rounds and marks come from.
   final Galley api;
+
+  /// Who is signed in, on a galley on a server; null on `galley serve`'s, where the reviewer
+  /// says who they are.
+  ///
+  /// The server keeps who wrote a mark or event by their account, and reads it back as their
+  /// alias (DESIGN D15); a `by` that is not the alias is refused (ServerGalley.raise). Rejected:
+  /// a name field here, whose every other value would be refused.
+  final SignedIn? signedIn;
 
   final DateTime Function() _now;
 
@@ -29,6 +44,9 @@ final class CanvasModel extends ChangeNotifier {
   String get reviewer => _reviewer;
   String _reviewer;
   set reviewer(String name) {
+    if (signedIn != null) {
+      throw StateError('the reviewer is the member signed in, ${signedIn!.alias}');
+    }
     _reviewer = name.trim();
     notifyListeners();
   }
@@ -56,7 +74,10 @@ final class CanvasModel extends ChangeNotifier {
     try {
       final rounds = await api.rounds();
       if (rounds.isEmpty) {
-        _state = const Unavailable('This galley has no rounds yet. Run `galley pack` in the app.');
+        _state = Unavailable(
+          'This galley has no rounds yet. Its owner makes one with '
+          '${signedIn == null ? '`galley pack`' : '`galley push`'} in the app.',
+        );
       } else {
         final n = rounds.last;
         final round = await api.round(n);
@@ -218,4 +239,19 @@ final class Shown extends CanvasState {
 
   /// The same round with [marks] as they are now.
   Shown withMarks(List<PlacedMark> marks) => Shown(n, round, board, marks);
+}
+
+/// The member a canvas on a server acts as, and how they sign out.
+final class SignedIn {
+  /// [alias], signed in as [email]; [signOut] ends the session on this browser.
+  const SignedIn({required this.email, required this.alias, required this.signOut});
+
+  /// What they signed in with.
+  final String email;
+
+  /// What the galley signs their marks and events with.
+  final String alias;
+
+  /// Forgets the session on this browser and goes back to signing in.
+  final void Function() signOut;
 }

@@ -1,9 +1,10 @@
 # galley_web
 
 The canvas: the latest round of a galley on one board, and the marks pinned to it. It is a
-Flutter web app, served by `galley serve` from the same origin as the galley's API, and it
-sees the galley only through that API (`lib/src/api.dart`), so a different backend changes
-nothing else here.
+Flutter web app, served from the same origin as the galley's API: by `galley serve`, for a
+galley kept on this machine, or by a Galley server, for one that lives there (`galley host`,
+DESIGN D15). It sees the galley only through core's `Galley` interface: `ServedGalley` for
+`serve`, and galley_server's `ServerGalley` for a server, so the board knows neither.
 
 - **The board.** Rows are flows (the first segment of a screen's path) and columns are states
   (one screen in one scenario). Each frame sits in its device's outline, at one frame pixel to
@@ -14,7 +15,14 @@ nothing else here.
 - **Threads.** Every mark is listed beside the board, including those the board cannot draw,
   each with the reason. A mark's thread shows its history, and offers what the reviewer may
   do next: verify or reopen an answer, and withdraw a mark they raised.
-- **Who is reviewing** is the name in the panel, or `?by=<name>` in the address.
+- **Who is reviewing**, under `galley serve`, is the name in the panel, or `?by=<name>` in the
+  address.
+- **On a server**, the address is `<server>/?galley=<id>`, which `galley link` and `galley
+  invite` print. The reviewer signs in with their email and the code mailed to it, says the
+  alias to sign their marks with if they were invited and have not joined, and is then
+  reviewing as that alias, which the panel shows with a way to sign out. A revoked reviewer,
+  or someone neither a member nor invited, is told so. The sign-in is kept in the browser's
+  `localStorage` and renewed on each visit (`lib/src/server_entry.dart`).
 
 It loads nothing from outside the machine that serves it: CanvasKit and Roboto are in the
 build, and the engine's font fallback points at the canvas's own server (`web/
@@ -32,6 +40,7 @@ D14). [docs/RELEASING.md](../../docs/RELEASING.md) says how it is built and pinn
 ```sh
 flutter build web --release --no-web-resources-cdn --no-wasm-dry-run
 dart run galley_cli:galley serve --web <this package>/build/web   # from the app's root
+dart run galley_cli:galley host --web <this package>/build/web    # or on a local server
 flutter test
 ```
 
