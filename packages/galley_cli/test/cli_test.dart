@@ -107,6 +107,7 @@ void main() {
   late StringBuffer out, err;
   late int ids;
   late String commit;
+  List<String>? renderedWith;
 
   String git(List<String> args) {
     final r = Process.runSync('git', [
@@ -141,7 +142,10 @@ void main() {
         err: err,
         now: () => DateTime.utc(2026, 11, 27, 0, ids),
         newId: () => 'm${++ids}',
-        renderer: ({required app, required test, required flutter}) => _FakeRenderer(fake),
+        renderer: ({required app, required test, required flutter, required testArgs}) {
+          renderedWith = testArgs;
+          return _FakeRenderer(fake);
+        },
         environment: const {},
       ),
     );
@@ -337,8 +341,10 @@ void main() {
     expect(await galley(['mark', '--frame', '$_home', '--note', 'x', '--by', 'r']), 64);
     expect(
       await galley(['mark', '--frame', '$_home', '--node', '0', '--note', ' ', '--by', 'r']),
-      64,
+      1,
+      reason: 'a blank note is refused by LocalGalley, which galley serve shares',
     );
+    expect('$err', contains('a mark says what is wrong'));
     expect(
       await galley(['mark', '--frame', '$_home', '--node', '0', '--note', 'x', '--by', ' ']),
       64,
@@ -362,11 +368,13 @@ void main() {
     expect(await galley(['answer', 'm1', 'wont-fix', '--by', 'c']), 64, reason: 'needs a note');
     expect(await galley(['answer', 'm9', 'question', '--note', 'q', '--by', 'c']), 1);
     expect(await galley(['verify', 'm1', '--by', 'r']), 1);
-    expect('$err', contains('m1 is open'));
+    expect('$err', contains('mark m1 is open, and cannot be verified now'));
     expect(await galley(['reopen', 'm1', '--note', 'still', '--by', 'r']), 1);
     expect(store().mark('m1')!.history, isEmpty, reason: 'nothing refused was recorded');
 
     expect(await galley(['answer', 'm1', 'question', '--note', 'which edge?', '--by', 'c']), 0);
+    expect(await galley(['answer', 'm1', 'question', '--note', 'again', '--by', 'c']), 1);
+    expect('$err', contains('mark m1 is answered, and cannot be answered now'));
     expect(await galley(['reopen', 'm1', '--by', 'r']), 64, reason: 'a reopen says why');
     expect(await galley(['reopen', 'm1', '--note', 'the left', '--by', 'r']), 0);
     expect(store().mark('m1')!.status, MarkStatus.reopened);
@@ -380,6 +388,13 @@ void main() {
       0,
     );
     expect('$out', contains('raised on Badge'));
+  });
+
+  test('pack passes what follows -- to flutter test, and nothing when nothing does', () async {
+    expect(await galley(['pack']), 0, reason: '$err');
+    expect(renderedWith, isEmpty);
+    expect(await galley(['pack', '--', '--run-skipped', '--name', 'home']), 0, reason: '$err');
+    expect(renderedWith, ['--run-skipped', '--name', 'home']);
   });
 
   test('--help is an answer, on the context\'s out', () async {

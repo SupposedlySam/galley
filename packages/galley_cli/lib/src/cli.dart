@@ -7,6 +7,7 @@ import 'package:args/command_runner.dart';
 import 'package:galley_core/galley_core.dart';
 
 import 'galley_directory.dart';
+import 'local_galley.dart';
 import 'renderer.dart';
 
 /// What the commands need from the world, so a test can supply all of it.
@@ -17,8 +18,7 @@ final class GalleyContext {
     StringSink? err,
     DateTime Function()? now,
     String Function()? newId,
-    RoundRenderer Function({required String app, required String test, required String flutter})?
-    renderer,
+    MakeRenderer? renderer,
     Map<String, String>? environment,
   }) : out = out ?? stdout,
        err = err ?? stderr,
@@ -40,8 +40,7 @@ final class GalleyContext {
   final String Function() newId;
 
   /// What renders a round for `pack`.
-  final RoundRenderer Function({required String app, required String test, required String flutter})
-  renderer;
+  final MakeRenderer renderer;
 
   /// Read for `GALLEY_BY`.
   final Map<String, String> environment;
@@ -71,7 +70,7 @@ Future<int> runGalley(List<String> args, [GalleyContext? context]) async {
   } on UsageException catch (e) {
     c.err.writeln(e);
     return 64;
-  } on _Refused catch (e) {
+  } on Refused catch (e) {
     c.err.writeln('galley: ${e.message}');
     return 1;
   } on StateError catch (e) {
@@ -93,12 +92,6 @@ final class _Runner extends CommandRunner<int> {
 
   @override
   void printUsage() => c.out.writeln(usage);
-}
-
-/// A command that cannot do what it was asked, and says why.
-final class _Refused implements Exception {
-  _Refused(this.message);
-  final String message;
 }
 
 abstract class _GalleyCommand extends Command<int> {
@@ -132,32 +125,27 @@ abstract class _GalleyCommand extends Command<int> {
 
   String? get note => _args.option('note');
 
+  LocalGalley get local => LocalGalley(galley, now: c.now, newId: c.newId);
+
   /// The one positional argument: a mark's id.
-  Mark get markArg {
+  String get markArg {
     final rest = _args.rest;
     if (rest.isEmpty) throw UsageException('which mark?', usage);
-    final mark = galley.mark(rest.first);
-    if (mark == null) throw _Refused('no mark "${rest.first}" in ${galley.path}');
-    return mark;
+    return rest.first;
   }
 
-  /// Appends [event] to [mark], and says what it is now.
-  int record(Mark mark, MarkEvent event) {
+  /// Appends the event [build] makes to the mark [id], and says what the mark is now.
+  ///
+  /// An event the core refuses to construct (a reopen with no note) is a usage error.
+  int record(String id, MarkEvent Function(DateTime at) build) {
     final Mark next;
     try {
-      next = mark.record(event);
-    } on StateError {
-      throw _Refused('mark ${mark.id} is ${mark.status.name}, and cannot be $name now');
+      next = local.record(id, build);
+    } on ArgumentError catch (e) {
+      throw UsageException('${e.message}', usage);
     }
-    galley.saveMark(next);
     c.out.writeln('${next.id}: ${next.status.name}');
     return 0;
-  }
-
-  int latestRound() {
-    final rounds = galley.rounds();
-    if (rounds.isEmpty) throw _Refused('${galley.path} has no rounds yet: run `galley pack`');
-    return rounds.last;
   }
 }
 
@@ -165,11 +153,18 @@ final class _Pack extends _GalleyCommand {
   _Pack(super.c) {
     argParser
       ..addOption('test', defaultsTo: 'test/galley_test.dart', help: 'The app\'s galley test.')
-      ..addOption('flutter', defaultsTo: 'flutter', help: 'The flutter command.');
+      ..addOption(
+        'flutter',
+        defaultsTo: 'flutter',
+        help: 'The flutter executable (one path, not a command).',
+      );
   }
 
   @override
   String get name => 'pack';
+
+  @override
+  String get invocation => 'galley pack [options] [-- <flutter test args>]';
 
   @override
   String get description => 'Render a new round, and carry every mark into it.';
@@ -179,10 +174,15 @@ final class _Pack extends _GalleyCommand {
     final g = galley;
     final n = g.nextRound();
     final exit = await c
-        .renderer(app: app, test: _args.option('test')!, flutter: _args.option('flutter')!)
+        .renderer(
+          app: app,
+          test: _args.option('test')!,
+          flutter: _args.option('flutter')!,
+          testArgs: _args.rest,
+        )
         .render(g.roundPath(n));
     if (!g.rounds().contains(n)) {
-      throw _Refused(
+      throw Refused(
         'round $n did not finish: the galley test exited $exit and wrote no index.json. '
         'What it did write is kept in ${g.roundPath(n)}.',
       );
@@ -237,15 +237,6 @@ final class _Pack extends _GalleyCommand {
   }
 }
 
-/// The word a person reads for [p].
-String placementName(Placement p) => switch (p) {
-  Raised() => 'raised',
-  Reanchored(result: final Located l) => l.isExact ? 'exact' : 'moved',
-  Reanchored(result: Lost()) => 'lost',
-  Unplaced() => 'unplaced',
-  Retired() => 'retired',
-};
-
 final class _MarkCommand extends _GalleyCommand {
   _MarkCommand(super.c) {
     argParser
@@ -266,47 +257,21 @@ final class _MarkCommand extends _GalleyCommand {
 
   @override
   Future<int> run() async {
-    final g = galley;
-    final n = latestRound();
     final key = FrameKey.parse(_required('frame'));
-    final frame = (await g.readRound(n)).round.frame(key);
-    if (frame == null) throw _Refused('round $n has no frame $key');
-    final tree = frame.tree;
-    if (tree == null) throw _Refused('frame $key in round $n has no tree to pin a widget of');
-
     final at = _args.option('at'), path = _args.option('node');
     if ((at == null) == (path == null)) throw UsageException('give one of --at and --node', usage);
-    final WidgetNode? node;
-    final PinOffset pin;
+    final PinTarget target;
     if (at != null) {
       final xy = at.split(',').map(double.tryParse).toList();
       if (xy.length != 2 || xy.contains(null)) throw UsageException('--at is x,y', usage);
-      node = tree.deepestAt(xy[0]!, xy[1]!);
-      pin = node == null ? const PinOffset(0.5, 0.5) : PinOffset.within(node.rect, xy[0]!, xy[1]!);
+      target = AtPoint(xy[0]!, xy[1]!);
     } else {
       final indexPath = path!.split('.').map(int.tryParse).toList();
       if (indexPath.contains(null)) throw UsageException('--node is an index path, 0.2.1', usage);
-      node = tree.at([...indexPath.nonNulls]);
-      pin = const PinOffset(0.5, 0.5);
+      target = AtNode([...indexPath.nonNulls]);
     }
-    if (node == null) throw _Refused('no widget at ${at ?? path} in frame $key');
-
-    final note = _required('note'), who = by;
-    if (note.trim().isEmpty) throw UsageException('a mark says what is wrong', usage);
-    final mark = Mark(
-      id: c.newId(),
-      frame: key,
-      anchor: Anchor.of(node),
-      pin: pin,
-      note: note,
-      by: who,
-      at: c.now().toUtc(),
-    );
-    final placements = g.placements(n) ?? Placements(const []);
-    g
-      ..saveMark(mark)
-      ..savePlacements(n, placements.plus([Carried.raised(mark)]));
-    c.out.writeln('${mark.id}: raised on $node in round $n');
+    final raised = await local.raise(frame: key, target: target, note: _required('note'), by: by);
+    c.out.writeln('${raised.mark.id}: raised on ${raised.node} in round ${raised.round}');
     return 0;
   }
 
@@ -329,27 +294,9 @@ final class _Pull extends _GalleyCommand {
 
   @override
   Future<int> run() async {
-    final g = galley;
-    final latest = g.rounds().lastOrNull;
+    final latest = galley.rounds().lastOrNull;
     final all = _args.flag('all');
-    final placed = g.lastPlaced().where((p) => all || p.carried.mark.status.awaitsAnswer);
-    final rounds = <int, StoredRound>{};
-    final items = <JsonMap>[];
-    for (final p in placed) {
-      final n = p.round;
-      final stored = n == null ? null : rounds[n] ??= await g.readRound(n);
-      final image = stored?.round.frame(p.carried.mark.frame)?.record.image;
-      items.add({
-        'id': p.carried.mark.id,
-        'status': p.carried.mark.status.name,
-        'round': n,
-        'placement': placementName(p.carried.placement),
-        'where': p.carried.placement.toJson(),
-        'anchor': p.carried.anchor.toJson(),
-        'image': image == null ? null : File('${g.roundPath(n!)}/$image').absolute.path,
-        'mark': p.carried.mark.toJson(),
-      });
-    }
+    final items = await local.workItems(all: all);
     if (_args.flag('json')) {
       c.out.writeln(
         const JsonEncoder.withIndent('  ').convert({'latest_round': latest, 'items': items}),
@@ -392,7 +339,7 @@ final class _AnswerCommand extends _GalleyCommand {
 
   @override
   Future<int> run() async {
-    final mark = markArg;
+    final id = markArg;
     final rest = _args.rest;
     if (rest.length != 2) throw UsageException('give the mark and how it was answered', usage);
     final Answer answer;
@@ -406,7 +353,7 @@ final class _AnswerCommand extends _GalleyCommand {
     } on ArgumentError catch (e) {
       throw UsageException('${e.name}: ${e.message}', usage);
     }
-    return record(mark, Answered(answer, by: by, at: c.now().toUtc()));
+    return record(id, (at) => Answered(answer, by: by, at: at));
   }
 
   /// The full SHA of `--commit`, which must be a commit in the app's repository.
@@ -422,7 +369,7 @@ final class _AnswerCommand extends _GalleyCommand {
       '--quiet',
       '$given^{commit}',
     ], workingDirectory: app);
-    if (r.exitCode != 0) throw _Refused('$given is not a commit in the repository at $app');
+    if (r.exitCode != 0) throw Refused('$given is not a commit in the repository at $app');
     return '${r.stdout}'.trim();
   }
 }
@@ -442,7 +389,7 @@ final class _Verify extends _GalleyCommand {
   String get description => 'Accept a mark\'s answer.';
 
   @override
-  Future<int> run() async => record(markArg, Verified(by: by, at: c.now().toUtc()));
+  Future<int> run() async => record(markArg, (at) => Verified(by: by, at: at));
 }
 
 final class _Reopen extends _GalleyCommand {
@@ -462,13 +409,6 @@ final class _Reopen extends _GalleyCommand {
 
   @override
   Future<int> run() async {
-    final mark = markArg;
-    final Reopened event;
-    try {
-      event = Reopened(note ?? '', by: by, at: c.now().toUtc());
-    } on ArgumentError catch (e) {
-      throw UsageException('${e.message}', usage);
-    }
-    return record(mark, event);
+    return record(markArg, (at) => Reopened(note ?? '', by: by, at: at));
   }
 }
