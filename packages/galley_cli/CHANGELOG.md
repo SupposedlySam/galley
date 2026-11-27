@@ -4,6 +4,16 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.5
+
+- `galley serve`: the galley over HTTP on loopback, for the canvas (DESIGN D13). It serves the
+  rounds' files, every mark as a work item, a new mark, and an event on a mark, all through the
+  same `LocalGalley` as the commands. A request whose Host is not loopback is refused, as is a
+  POST that is not JSON. Event times are the server's, and a fix's commit is stored in full.
+- `GalleyServer` is public, and `LocalGalley.workItems` takes `imageAt` to name an image.
+- `LocalGalley` takes the app's `repository`, and `fullCommit` is the check `answer fixed`
+  makes.
+
 ## 0.3.4
 
 Fixes from the first app to run `pack`:

@@ -4,10 +4,11 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.4, the local loop.** Galley renders and records a round of frames from inside an
+**Status: 0.3.5, the local loop.** Galley renders and records a round of frames from inside an
 app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local galley: pack,
-mark, pull, answer, verify, with every mark carried into the next round. The canvas and the
-server that reviewers use are not built yet ([the plan](docs/ROADMAP.md)).
+mark, pull, answer, verify, with every mark carried into the next round. `galley serve` serves
+that galley on this machine for the canvas. The canvas and the server that outside reviewers
+use are not built yet ([the plan](docs/ROADMAP.md)).
 
 | Package | What it is |
 |---|---|
@@ -25,7 +26,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.4
+      ref: v0.3.5
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -103,7 +104,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley_cli
-      ref: v0.3.4
+      ref: v0.3.5
 ```
 
 Add `.galley/` to `.gitignore`. Otherwise the earlier rounds make every later round look as if
@@ -125,6 +126,11 @@ under fvm, give the absolute path of its `flutter`. `pull` lists what waits on a
 `pull --all` adds the answered marks waiting on a reviewer, and the closed ones. `--by` defaults
 to `GALLEY_BY`. Reviewers will mark on the canvas; `mark` is for the
 app's owner and for tests.
+
+`galley serve` serves the galley on `http://localhost:7340/` (`--port` to change it) until
+Ctrl-C: the rounds' files, every mark, and new marks and events through the same checks as the
+commands (DESIGN D13). It listens on loopback only, and `--web <dir>` serves the built canvas
+at `/`.
 
 ## What a round contains
 
