@@ -26,8 +26,8 @@ FrameKey keyOf(
   Map<String, String> more = const {},
 }) => FrameKey({'screen': screen, 'scenario': scenario, 'device': on.id, ...more});
 
-/// A rendered frame's record, with a tree and no image.
-FrameRecord recordOf(FrameKey key, DeviceProfile on, {String? tree}) => FrameRecord(
+/// A rendered frame's record, with a tree and an image when named.
+FrameRecord recordOf(FrameKey key, DeviceProfile on, {String? tree, String? image}) => FrameRecord(
   key: key,
   scenario: key.values['scenario']!,
   uri: Uri.parse('/${key.values['screen']}'),
@@ -36,6 +36,7 @@ FrameRecord recordOf(FrameKey key, DeviceProfile on, {String? tree}) => FrameRec
   device: on,
   essential: true,
   tree: tree,
+  image: image,
 );
 
 /// A frame of [screen] on [on], with no tree.
@@ -74,13 +75,19 @@ final class MemoryRoundFiles implements RoundFiles {
   }
 }
 
-/// The files of a round of [keys], each on [pixel7] with [treeWithButton].
-Map<String, Object?> roundFiles(List<FrameKey> keys) {
+/// The files of a round of [keys], each on [pixel7] with [treeWithButton], and an image
+/// `frames/<i>.png` of each with [images].
+Map<String, Object?> roundFiles(List<FrameKey> keys, {bool images = false}) {
   final records = [for (final (i, _) in keys.indexed) 'records/$i.json'];
   return {
     'index.json': RoundManifest(frames: records, planned: keys.length).toJson(),
     for (final (i, k) in keys.indexed) ...{
-      records[i]: recordOf(k, pixel7, tree: 'trees/$i.json').toJson(),
+      records[i]: recordOf(
+        k,
+        pixel7,
+        tree: 'trees/$i.json',
+        image: images ? 'frames/$i.png' : null,
+      ).toJson(),
       'trees/$i.json': treeWithButton(pixel7).toJson(),
     },
   };
@@ -89,17 +96,35 @@ Map<String, Object?> roundFiles(List<FrameKey> keys) {
 /// A galley in memory that keeps marks by the core's rules, as `galley serve` does, and
 /// remembers what it was asked.
 final class FakeGalley implements Galley {
-  FakeGalley({this.roundsList = const [1], Map<String, Object?>? files, this.refuse})
-    : files = files ?? roundFiles([keyOf('home', pixel7)]);
+  FakeGalley({
+    this.roundsList = const [1],
+    Map<String, Object?>? files,
+    this.refuse,
+    this.byRound = const {},
+  }) : files = files ?? roundFiles([keyOf('home', pixel7)]);
 
   final List<int> roundsList;
+
+  /// The files of every round not in [byRound].
   final Map<String, Object?> files;
+
+  /// The files of a round, by its number, where it differs from [files].
+  final Map<int, Map<String, Object?>> byRound;
+
+  /// The rounds read, in order.
+  final roundReads = <int>[];
+
+  /// Rounds whose reading is refused with this, by number.
+  final refuseRound = <int, Refused>{};
 
   /// When set, every call is refused with it.
   Refused? refuse;
 
   /// Every mark, by id, and the round each was placed in (null: none).
   final marksById = <String, (Mark, int?)>{};
+
+  /// The round each mark was raised on, by id; the round it was placed in when absent.
+  final raisedIn = <String, int?>{};
 
   /// The events recorded, as sent: without a time, which the galley gives.
   final recorded = <(String, JsonMap)>[];
@@ -122,7 +147,9 @@ final class FakeGalley implements Galley {
   @override
   Future<StoredRound> round(int n) async {
     _check();
-    return StoredRound.read(MemoryRoundFiles(files));
+    roundReads.add(n);
+    if (refuseRound[n] case final r?) throw r;
+    return StoredRound.read(MemoryRoundFiles(byRound[n] ?? files));
   }
 
   @override
@@ -136,6 +163,7 @@ final class FakeGalley implements Galley {
         PlacedMark(
           round,
           Carried(m, round == null ? const Unplaced('no round') : const Raised(), m.anchor),
+          raisedIn: raisedIn.containsKey(m.id) ? raisedIn[m.id] : round,
         ),
     ];
   }
@@ -178,8 +206,12 @@ final class FakeGalley implements Galley {
     }
   }
 
-  /// Puts [mark] in, placed in [round].
-  void seed(Mark mark, {int? round = 1}) => marksById[mark.id] = (mark, round);
+  /// Puts [mark] in, placed in [round], raised on [raisedOn] (on [round] when not given). A
+  /// mark raised on no known round is put in with this, then `raisedIn[id] = null`.
+  void seed(Mark mark, {int? round = 1, int? raisedOn}) {
+    marksById[mark.id] = (mark, round);
+    raisedIn[mark.id] = raisedOn ?? round;
+  }
 }
 
 /// A mark on the button of [frame], raised by [by], with [history].

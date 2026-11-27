@@ -2,6 +2,7 @@ import 'package:galley_core/galley_core.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'canvas_model.dart';
+import 'compare.dart';
 import 'marks.dart';
 
 /// Beside the board: who is reviewing, every mark, and the open mark's thread.
@@ -103,7 +104,11 @@ class _ReviewerFieldState extends State<_ReviewerField> {
   );
 }
 
-/// Every mark, newest first, with where it is.
+/// What waits on the reviewer, then every mark, newest first, with where it is.
+///
+/// The panel opens on this, so what is for the reviewer is the first thing they see (the bet's
+/// "what's for me" landing): their answered marks, each a tap from its answer and its widget
+/// then and now.
 class MarkList extends StatelessWidget {
   /// The list of [shown]'s marks.
   const MarkList({super.key, required this.model, required this.shown, required this.onShow});
@@ -126,8 +131,30 @@ class MarkList extends StatelessWidget {
       );
     }
     final marks = [...shown.marks]..sort((a, b) => b.mark.at.compareTo(a.mark.at));
+    final queue = model.queue;
+    final text = Theme.of(context).textTheme;
+    Widget heading(String s) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Text(s, style: text.titleSmall),
+    );
     return ListView(
       children: [
+        if (queue.isNotEmpty) ...[
+          heading('${queue.length} ${queue.length == 1 ? 'answer waits' : 'answers wait'} on you'),
+          for (final m in queue)
+            ListTile(
+              key: ValueKey('queue ${m.mark.id}'),
+              leading: Icon(Icons.circle, size: 14, color: statusColor(m.mark.status)),
+              title: Text(m.mark.note, maxLines: 2, overflow: TextOverflow.ellipsis),
+              subtitle: Text(_answerLine(m.mark), maxLines: 2, overflow: TextOverflow.ellipsis),
+              onTap: () {
+                model.select(m.mark.id);
+                onShow(m.mark.frame);
+              },
+            ),
+          const Divider(height: 16),
+          heading('Every mark'),
+        ],
         for (final m in marks)
           ListTile(
             key: ValueKey(m.mark.id),
@@ -148,7 +175,20 @@ class MarkList extends StatelessWidget {
       ],
     );
   }
+
+  /// Who answered [mark], and how.
+  static String _answerLine(Mark mark) {
+    final a = mark.history.whereType<Answered>().last;
+    return '${a.by}: ${_answered(a.answer)}${a.answer.note == null ? '' : ' · ${a.answer.note}'}';
+  }
 }
+
+/// How an answer reads in a line: the same words in the queue and in the thread.
+String _answered(Answer answer) => switch (answer.kind) {
+  AnswerKind.fixed => 'fixed in ${answer.commit}',
+  AnswerKind.wontFix => "won't fix",
+  AnswerKind.question => 'a question',
+};
 
 /// One mark's thread: what was said, by whom and when, and what the reviewer can do next.
 class Thread extends StatefulWidget {
@@ -258,6 +298,11 @@ class _ThreadState extends State<Thread> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text('Not on the board: $why', style: text.bodySmall),
           ),
+        if (mark.status == MarkStatus.answered)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Compare(model: model, shown: widget.shown, mark: widget.mark),
+          ),
         _Entry(
           who: mark.by,
           at: mark.at,
@@ -272,7 +317,7 @@ class _ThreadState extends State<Thread> {
             minLines: 1,
             maxLines: 4,
             decoration: const InputDecoration(
-              labelText: 'Why (for a reopen or a withdrawal)',
+              labelText: 'What is still wrong (for Not yet), or why you withdraw it',
               border: OutlineInputBorder(),
               isDense: true,
             ),
@@ -284,13 +329,15 @@ class _ThreadState extends State<Thread> {
           children: [
             for (final r in offered)
               switch (r) {
+                // The bet's words: a reviewer says whether the answer looks right, and the
+                // events they record are named for that (verified, reopened).
                 Review.verify => FilledButton(
                   onPressed: _sending ? null : () => _do(r),
-                  child: const Text('Verify'),
+                  child: const Text('Looks right'),
                 ),
                 Review.reopen => OutlinedButton(
                   onPressed: _sending ? null : () => _do(r),
-                  child: const Text('Reopen'),
+                  child: const Text('Not yet'),
                 ),
                 Review.withdraw => TextButton(
                   onPressed: _sending ? null : () => _do(r),
@@ -328,11 +375,7 @@ class _Entry extends StatelessWidget {
     Answered(:final answer) => _Entry(
       who: e.by,
       at: e.at,
-      what: switch (answer.kind) {
-        AnswerKind.fixed => 'answered: fixed in ${answer.commit}',
-        AnswerKind.wontFix => "answered: won't fix",
-        AnswerKind.question => 'answered with a question',
-      },
+      what: 'answered: ${_answered(answer)}',
       note: answer.note,
     ),
     Verified() => _Entry(who: e.by, at: e.at, what: 'verified it'),

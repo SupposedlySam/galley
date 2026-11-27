@@ -199,12 +199,24 @@ void main() {
         final m = buttonMark('m', home);
         final anchor = m.anchor;
         final marks = [
-          PlacedMark(2, Carried.raised(m)),
-          PlacedMark(null, Carried(buttonMark('none', home), const Unplaced('no round'), anchor)),
-          PlacedMark(1, Carried(buttonMark('older', home), const Raised(), anchor)),
-          PlacedMark(2, Carried(buttonMark('unplaced', home), const Unplaced('no tree'), anchor)),
-          PlacedMark(2, Carried(buttonMark('lost', home), Reanchored(Lost(const [])), anchor)),
-          PlacedMark(2, Carried(buttonMark('retired', home), const Retired(), anchor)),
+          PlacedMark(2, Carried.raised(m), raisedIn: 2),
+          PlacedMark(
+            null,
+            Carried(buttonMark('none', home), const Unplaced('no round'), anchor),
+            raisedIn: 1,
+          ),
+          PlacedMark(1, Carried(buttonMark('older', home), const Raised(), anchor), raisedIn: 1),
+          PlacedMark(
+            2,
+            Carried(buttonMark('unplaced', home), const Unplaced('no tree'), anchor),
+            raisedIn: 1,
+          ),
+          PlacedMark(
+            2,
+            Carried(buttonMark('lost', home), Reanchored(Lost(const [])), anchor),
+            raisedIn: 1,
+          ),
+          PlacedMark(2, Carried(buttonMark('retired', home), const Retired(), anchor), raisedIn: 1),
         ];
         final shown = Shown(2, round, Board.of(round.frames), marks);
 
@@ -223,5 +235,138 @@ void main() {
         );
       },
     );
+  });
+
+  group('the queue', () {
+    Answered answeredAt(int hour) => Answered(
+      Answer.wontFix(note: 'by design'),
+      by: 'Claude',
+      at: DateTime.utc(2026, 11, 26, hour),
+    );
+
+    // Rae's marks in each status, two of them answered at different times, and an answered
+    // mark of someone else's.
+    Future<(CanvasModel, FakeGalley)> population({String reviewer = 'Rae'}) async {
+      final (model, api) = await loaded(reviewer: reviewer);
+      for (final m in [
+        buttonMark('later', home, by: 'Rae', history: [answeredAt(11)]),
+        buttonMark('earlier', home, by: 'Rae', history: [answeredAt(10)]),
+        buttonMark('theirs', home, by: 'Sam', history: [answeredAt(9)]),
+        buttonMark('open', home, by: 'Rae'),
+        buttonMark(
+          'done',
+          home,
+          by: 'Rae',
+          history: [
+            answeredAt(8),
+            Verified(by: 'Rae', at: t),
+          ],
+        ),
+        // Hand-written, naming nobody: the core refuses to raise one, not to read one.
+        buttonMark('nobody', home, by: '', history: [answeredAt(7)]),
+      ]) {
+        api.seed(m, round: 2);
+      }
+      await model.load();
+      return (model, api);
+    }
+
+    List<String> ids(CanvasModel model) => [for (final m in model.queue) m.mark.id];
+
+    test("is the reviewer's own answered marks, the longest waiting first", () async {
+      final (model, _) = await population();
+      expect(ids(model), ['earlier', 'later']);
+      expect((model.state as Shown).marks, hasLength(6), reason: 'of six marks');
+    });
+
+    test(
+      'is empty for someone who has said nothing yet, or whose marks are not answered',
+      () async {
+        expect(ids((await population(reviewer: '')).$1), isEmpty);
+        expect(ids((await population(reviewer: 'Sam')).$1), ['theirs'], reason: 'the control');
+        expect(ids((await population(reviewer: 'Owner')).$1), isEmpty);
+      },
+    );
+
+    test('a mark taken from it opens the next, and the last opens the list', () async {
+      final (model, _) = await population();
+      final queue = model.queue;
+      model.select('earlier');
+      expect(await model.record(queue.first.mark, model.verified()), isNull);
+      expect(
+        [model.selected, ...ids(model)],
+        ['later', 'later'],
+        reason: 'selected, then the queue',
+      );
+
+      expect(await model.record(queue.last.mark, model.reopened('still tight')), isNull);
+      expect([model.selected, ...ids(model)], [null], reason: 'nothing selected, and no queue');
+    });
+
+    test('a mark not in it leaves the thread open', () async {
+      final (model, _) = await population(reviewer: 'Sam');
+      final rae = (model.state as Shown).marks.firstWhere((m) => m.mark.id == 'later');
+      model.select('later');
+      expect(await model.record(rae.mark, model.verified()), isNull);
+      expect(
+        [model.selected, ...ids(model)],
+        ['later', 'theirs'],
+        reason: 'selected, then the queue',
+      );
+    });
+  });
+
+  group('before', () {
+    final other = keyOf('other', pixel7);
+
+    Future<(CanvasModel, FakeGalley)> galley() async {
+      final api = FakeGalley(
+        roundsList: [1, 2],
+        files: roundFiles([home]),
+        byRound: {
+          1: roundFiles([home, other], images: true),
+        },
+      );
+      final model = CanvasModel(api, reviewer: 'Rae', now: () => t);
+      await model.load();
+      return (model, api);
+    }
+
+    PlacedMark placed(String id, {required int? raisedIn, FrameKey? on}) =>
+        PlacedMark(2, Carried.raised(buttonMark(id, on ?? home)), raisedIn: raisedIn);
+
+    test('is the frame in the round it was raised on, each round read once', () async {
+      final (model, api) = await galley();
+      expect(api.roundReads, [2], reason: 'the load');
+
+      final a = await model.before(placed('a', raisedIn: 1));
+      final b = await model.before(placed('b', raisedIn: 1, on: other));
+      expect([a, b].map((x) => ((x as BeforeIn).n, x.record.key, x.record.image)), [
+        (1, home, 'frames/0.png'),
+        (1, other, 'frames/1.png'),
+      ]);
+      expect(api.roundReads, [2, 1]);
+
+      final shown = await model.before(placed('c', raisedIn: 2));
+      expect(((shown as BeforeIn).n, shown.record.image), (2, null));
+      expect(api.roundReads, [2, 1], reason: 'the round shown is not read again');
+    });
+
+    test('says why when it cannot be shown, and reads a refused round again', () async {
+      final (model, api) = await galley();
+      String? why(Before b) => switch (b) {
+        BeforeUnknown(:final why) => why,
+        BeforeIn() => null,
+      };
+
+      expect(why(await model.before(placed('a', raisedIn: null))), contains('not recorded'));
+      expect(why(await model.before(placed('a', raisedIn: 2, on: other))), contains('no frame'));
+
+      api.refuseRound[1] = const Refused.environment('connection refused');
+      expect(why(await model.before(placed('a', raisedIn: 1))), contains('connection refused'));
+      api.refuseRound.clear();
+      expect(await model.before(placed('a', raisedIn: 1)), isA<BeforeIn>());
+      expect(api.roundReads, [2, 1, 1]);
+    });
   });
 }

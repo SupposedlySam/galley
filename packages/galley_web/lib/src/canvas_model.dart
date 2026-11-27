@@ -110,8 +110,61 @@ final class CanvasModel extends ChangeNotifier {
 
   /// Records the event [event] builds on [mark]. Returns why not, or null when it was
   /// recorded. The galley gives the time ([Galley.record]).
-  Future<String?> record(Mark mark, MarkEvent Function(DateTime at) event) =>
-      _act(() => api.record(mark.id, event));
+  ///
+  /// A mark taken from [queue] opens the next one in it, or the list when it was the last: a
+  /// reviewer works through what waits on them without going back between each.
+  Future<String?> record(Mark mark, MarkEvent Function(DateTime at) event) {
+    final queued = queue.any((m) => m.mark.id == mark.id);
+    return _act(
+      () => api.record(mark.id, event),
+      then: () {
+        if (queued) _selected = queue.firstOrNull?.mark.id;
+      },
+    );
+  }
+
+  /// What waits on the reviewer: the marks they raised that were answered, oldest answer
+  /// first, so the one waiting longest is checked first. Empty until the reviewer says who
+  /// they are (a hand-written mark naming nobody is nobody's), or while no round is shown.
+  ///
+  /// Only their own marks: anyone may verify an answer (MarkEvent.apply), but the person who
+  /// raised a mark is the one who knows what they meant. Rejected: every answered mark, which
+  /// in a galley of three reviewers would put two thirds of the queue in front of someone who
+  /// cannot say whether it is what was asked for.
+  List<PlacedMark> get queue {
+    final shown = _state;
+    if (shown is! Shown || _reviewer.isEmpty) return const [];
+    return [
+      for (final m in shown.marks)
+        if (m.mark.status == MarkStatus.answered && m.mark.by == _reviewer) m,
+    ]..sort((a, b) => _answeredAt(a.mark).compareTo(_answeredAt(b.mark)));
+  }
+
+  static DateTime _answeredAt(Mark m) => m.history.whereType<Answered>().last.at;
+
+  /// The frame [m] was raised on, as it was then: what the reviewer marked, to check the answer
+  /// against. Each round is read once, however many marks were raised on it.
+  Future<Before> before(PlacedMark m) async {
+    final n = m.raisedIn;
+    if (n == null) return const BeforeUnknown('the round it was raised on is not recorded');
+    try {
+      final round = switch (_state) {
+        Shown(n: final shown, :final round) when shown == n => round,
+        _ => await (_rounds[n] ??= api.round(n)),
+      };
+      final frame = round.round.frame(m.mark.frame);
+      if (frame == null) return BeforeUnknown('round $n has no frame ${m.mark.frame}');
+      return BeforeIn(n, frame.record);
+    } on Refused catch (e) {
+      _rounds.remove(n)?.ignore(); // Read again next time: a refusal may pass.
+      return BeforeUnknown('round $n was not read: ${e.message}');
+    } on FormatException catch (e) {
+      _rounds.remove(n)?.ignore(); // Read again next time: it may have been cut short.
+      return BeforeUnknown('round $n does not read: ${e.message}');
+    }
+  }
+
+  final _rounds = <int, Future<StoredRound>>{};
 
   /// Verified by the reviewer: what [record] takes for "looks right".
   MarkEvent Function(DateTime at) verified() =>
@@ -143,7 +196,7 @@ final class CanvasModel extends ChangeNotifier {
     return event.apply(mark.status, raisedBy: mark.by) != null;
   }
 
-  Future<String?> _act(Future<void> Function() action) async {
+  Future<String?> _act(Future<void> Function() action, {void Function()? then}) async {
     if (_reviewer.isEmpty) {
       return 'Say who you are first: a mark and its thread name who said what.';
     }
@@ -154,14 +207,15 @@ final class CanvasModel extends ChangeNotifier {
     } on ArgumentError catch (e) {
       return '${e.message}';
     }
-    await _refreshMarks();
+    await _refreshMarks(then);
     return null;
   }
 
-  Future<void> _refreshMarks() async {
+  Future<void> _refreshMarks(void Function()? then) async {
     if (_state case final Shown s) {
       try {
         _state = s.withMarks(await api.marks());
+        then?.call();
       } on Refused catch (e) {
         _state = Unavailable(e.message);
       }
@@ -239,6 +293,32 @@ final class Shown extends CanvasState {
 
   /// The same round with [marks] as they are now.
   Shown withMarks(List<PlacedMark> marks) => Shown(n, round, board, marks);
+}
+
+/// The frame a mark was raised on, as it was then, or why it cannot be shown.
+sealed class Before {
+  const Before();
+}
+
+/// Raised on [record]'s frame in round [n].
+final class BeforeIn extends Before {
+  /// In round [n], as [record] kept it.
+  const BeforeIn(this.n, this.record);
+
+  /// The round.
+  final int n;
+
+  /// The frame there.
+  final FrameRecord record;
+}
+
+/// Not shown, because of [why]: said, so an empty box is never read as "nothing was there".
+final class BeforeUnknown extends Before {
+  /// Unknown, because of [why].
+  const BeforeUnknown(this.why);
+
+  /// Why.
+  final String why;
 }
 
 /// The member a canvas on a server acts as, and how they sign out.

@@ -4,6 +4,7 @@ import 'package:galley_web/src/app.dart';
 import 'package:galley_web/src/board.dart';
 import 'package:galley_web/src/board_view.dart';
 import 'package:galley_web/src/canvas_model.dart';
+import 'package:galley_web/src/compare.dart';
 import 'package:galley_web/src/frame_tile.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -235,7 +236,7 @@ void main() {
     }
 
     List<String> buttons(WidgetTester tester) => [
-      for (final label in ['Verify', 'Reopen', 'Withdraw'])
+      for (final label in ['Looks right', 'Not yet', 'Withdraw'])
         // An ancestor of any button type: `find.byType` matches the exact type only.
         if (find
             .ancestor(
@@ -249,7 +250,7 @@ void main() {
 
     testWidgets('of an answer offers its verifying or reopening', (tester) async {
       await openThread(tester, buttonMark('a', _home, history: [answered]));
-      expect(buttons(tester), ['Verify', 'Reopen']);
+      expect(buttons(tester), ['Looks right', 'Not yet']);
     });
 
     testWidgets("of one's own open mark offers only its withdrawal", (tester) async {
@@ -268,22 +269,123 @@ void main() {
     ) async {
       final api = await openThread(tester, buttonMark('a', _home, history: [answered]));
 
-      await tester.tap(find.text('Reopen'));
+      await tester.tap(find.text('Not yet'));
       await tester.pump();
       expect(find.text('a reopen must say what is still wrong'), findsOneWidget);
       expect(api.recorded, isEmpty);
 
       await tester.enterText(
-        find.widgetWithText(TextField, 'Why (for a reopen or a withdrawal)'),
+        find.widgetWithText(TextField, 'What is still wrong (for Not yet), or why you withdraw it'),
         'still small',
       );
-      await tester.tap(find.text('Reopen'));
+      await tester.tap(find.text('Not yet'));
       await tester.pump();
       await tester.pump();
 
       expect(api.recorded.map((r) => r.$2['note']), ['still small']);
       expect(api.marksById['a']!.$1.status, MarkStatus.reopened);
       expect(find.text('reopened'), findsWidgets);
+    });
+  });
+
+  group('what waits on the reviewer', () {
+    List<String> images(WidgetTester tester) => [
+      for (final i in tester.widgetList<Image>(
+        find.descendant(of: find.byType(Compare), matching: find.byType(Image)),
+      ))
+        (i.image as NetworkImage).url,
+    ];
+
+    Future<CanvasModel> openQueued(
+      WidgetTester tester,
+      FakeGalley api, {
+      void Function()? before,
+    }) async {
+      final model = await pumpCanvas(tester, api, reviewer: 'Tester');
+      before?.call();
+      await tester.tap(find.byKey(const ValueKey('queue a')));
+      await tester.pump();
+      await tester.pump();
+      return model;
+    }
+
+    testWidgets('is their answered marks, apart from the rest, each one tap from its thread', (
+      tester,
+    ) async {
+      final api = apiOf([
+        buttonMark('a', _home, history: [answered]),
+        buttonMark('b', _home),
+        buttonMark('c', _home, by: 'Sam', history: [answered]),
+      ]);
+      final model = await openQueued(
+        tester,
+        api,
+        before: () {
+          expect(find.text('1 answer waits on you'), findsOneWidget);
+          expect(find.byKey(const ValueKey('queue c')), findsNothing, reason: "Sam's");
+          expect(find.text('Every mark'), findsOneWidget);
+          expect(find.text('Claude: fixed in abc1234'), findsOneWidget);
+        },
+      );
+      expect(model.selected, 'a');
+      expect(find.byType(Compare), findsOneWidget);
+    });
+
+    testWidgets('shows nothing above the list when nothing waits', (tester) async {
+      await pumpCanvas(tester, apiOf([buttonMark('a', _home)]), reviewer: 'Tester');
+      expect(find.textContaining('on you'), findsNothing);
+      expect(find.text('Every mark'), findsNothing);
+      expect(find.text('make it primary'), findsOneWidget, reason: 'the mark is listed');
+    });
+
+    testWidgets('compares the widget in the round it was raised on with the round shown', (
+      tester,
+    ) async {
+      final api = FakeGalley(
+        roundsList: [1, 2],
+        files: roundFiles(_keys, images: true),
+        byRound: {1: roundFiles(_keys.reversed.toList(), images: true)},
+      )..seed(buttonMark('a', _home, history: [answered]), round: 2, raisedOn: 1);
+      await openQueued(tester, api);
+      expect(find.text('As you marked it, round 1'), findsOneWidget);
+      expect(find.text('Now, round 2'), findsOneWidget);
+      // Home is the last frame of round 1 and the first of round 2: each side reads its own.
+      expect(images(tester), [
+        'http://galley.test/api/rounds/1/frames/3.png',
+        'http://galley.test/api/rounds/2/frames/0.png',
+      ]);
+    });
+
+    testWidgets('says what it cannot show: no image, or no record of the round raised on', (
+      tester,
+    ) async {
+      final api = apiOf([
+        buttonMark('a', _home, history: [answered]),
+      ]);
+      api.raisedIn['a'] = null;
+      await openQueued(tester, api);
+      expect(find.text('As you marked it'), findsOneWidget);
+      expect(find.textContaining('is not recorded'), findsOneWidget);
+      expect(find.text('Now, round 1'), findsOneWidget);
+      expect(find.text('no image was captured of this frame'), findsOneWidget);
+      expect(images(tester), isEmpty);
+    });
+  });
+
+  group('cropAround', () {
+    const frame = (width: 400.0, height: 800.0);
+    List<double> of(LogicalRect r) => [r.left, r.top, r.width, r.height];
+
+    test('is the box and a margin on every side', () {
+      expect(of(cropAround(const LogicalRect(100, 200, 50, 20), frame)), [76, 176, 98, 68]);
+    });
+
+    test('stops at the edges of the frame', () {
+      expect(of(cropAround(const LogicalRect(10, 790, 380, 10), frame)), [0, 766, 400, 34]);
+    });
+
+    test('is the frame for a box larger than it', () {
+      expect(of(cropAround(const LogicalRect(-10, -10, 500, 900), frame)), [0, 0, 400, 800]);
     });
   });
 }
