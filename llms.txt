@@ -22,7 +22,8 @@ findings: `landing-unknown`, `frozen`, `missing-font`, `default-font`, `network-
 `unpainted`, `broken-word`, `broken-word-unseen`.
 
 `dart run galley_cli:galley pull --json` lists the open marks as work items: id, status,
-placement, the frame's PNG and the widget's source location. Answer each with `galley answer
+placement, the frame's PNG and the widget's source location, and as `damaged` any mark on a
+server that does not read, with why (no push until it is mended). Answer each with `galley answer
 <id> fixed --commit <sha>`, `wont-fix --note`, or `question --note`. A mark is never deleted:
 whoever raised it can `galley withdraw <id> --note`. `galley serve` serves
 the same galley as JSON on loopback (DESIGN D13): `GET /api/marks`, `POST /api/marks`, `POST

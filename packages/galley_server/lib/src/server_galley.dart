@@ -87,14 +87,25 @@ final class ServerGalley implements Galley {
   }
 
   @override
-  Future<List<PlacedMark>> marks() async {
-    final (marks: marks, rounds: finished) = await _everything();
+  Future<GalleyMarks> marks() async {
+    final (:marks, :damaged, rounds: finished) = await _everything();
+    final known = {for (final m in marks.values) m.mark.id: m.mark};
+    final unread = {for (final d in damaged) d.id};
     final placements = <int, Placements>{
       for (final r in finished.reversed)
-        if (r.placements != null)
-          r.number: _placements(r, {for (final m in marks.values) m.mark.id: m.mark}),
+        if (r.placements != null) r.number: _placements(r, known, unread),
     };
-    return [for (final m in marks.values) _lastPlaced(m, finished, placements)];
+    final placed = <PlacedMark>[];
+    final alsoDamaged = <DamagedMark>[];
+    for (final m in marks.values) {
+      try {
+        placed.add(_lastPlaced(m, finished, placements));
+      } on Refused catch (e) {
+        if (e.kind != RefusalKind.damaged) rethrow;
+        alsoDamaged.add(DamagedMark(m.mark.id, e.message));
+      }
+    }
+    return GalleyMarks(placed, damaged: [...damaged, ...alsoDamaged]);
   }
 
   @override
@@ -209,8 +220,10 @@ final class ServerGalley implements Galley {
     };
   }
 
-  /// Every mark of the galley with its events, and the finished rounds.
-  Future<({Map<String, _MarkRows> marks, List<_RoundRecord> rounds})> _everything() async {
+  /// Every mark of the galley with its events, the marks that do not read, and the finished
+  /// rounds.
+  Future<({Map<String, _MarkRows> marks, List<DamagedMark> damaged, List<_RoundRecord> rounds})>
+  _everything() async {
     final galley = _quoted(galleyId);
     final membersOf = _members();
     final finishedOf = _finishedRounds();
@@ -239,16 +252,23 @@ final class ServerGalley implements Galley {
       (eventsByMark[JsonReader(e, 'an event').string('mark')] ??= []).add(e);
     }
     final numberOf = {for (final r in finished) r.id: r.number};
-    return (
-      marks: {
-        for (final row in marks)
-          JsonReader(row, 'a mark').string('id'): _MarkRows(
-            _markOf(row, eventsByMark[row['id']] ?? const [], aliases),
-            numberOf[row['round']],
-          ),
-      },
-      rounds: finished,
-    );
+    final read = <String, _MarkRows>{};
+    final damaged = <DamagedMark>[];
+    for (final row in marks) {
+      // A row with no id cannot be named, so it is not a damaged mark but a damaged list, and
+      // refused as one.
+      final id = JsonReader(row, 'a mark').string('id');
+      try {
+        read[id] = _MarkRows(
+          _markOf(row, eventsByMark[id] ?? const [], aliases),
+          numberOf[row['round']],
+        );
+      } on Refused catch (e) {
+        if (e.kind != RefusalKind.damaged) rethrow;
+        damaged.add(DamagedMark(id, e.message));
+      }
+    }
+    return (marks: read, damaged: damaged, rounds: finished);
   }
 
   /// The galley's members, as the signed-in user may list them: every one, revoked ones too,
@@ -297,13 +317,25 @@ final class ServerGalley implements Galley {
     }
   }
 
-  Placements _placements(_RoundRecord round, Map<String, Mark> marks) {
+  /// [round]'s placements of [marks]. Those of a mark in [unread] are left out: a placement is
+  /// read with its mark, and that mark is listed as damaged already, so its placement would
+  /// only refuse every other one of the round. A placement of a mark that is in neither is
+  /// still refused: the round names a mark the galley does not have.
+  Placements _placements(_RoundRecord round, Map<String, Mark> marks, Set<String> unread) {
+    final json = switch (round.placements) {
+      final Map<String, Object?> map && {'placements': final List<Object?> all}
+          when unread.isNotEmpty =>
+        {
+          ...map,
+          'placements': [
+            for (final c in all)
+              if (!(c is Map && unread.contains(c['mark']))) c,
+          ],
+        },
+      final other => other,
+    };
     try {
-      return Placements.fromJson(
-        round.placements,
-        'round ${round.number}.placements',
-        (id) => marks[id],
-      );
+      return Placements.fromJson(json, 'round ${round.number}.placements', (id) => marks[id]);
     } on FormatException catch (e) {
       throw Refused.damaged('round ${round.number}\'s placements do not read: ${e.message}');
     }

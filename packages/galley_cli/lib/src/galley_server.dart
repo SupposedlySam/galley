@@ -134,10 +134,11 @@ final class GalleyServer {
         final rounds = _local.directory.rounds();
         _json(request.response, 200, {'rounds': rounds, 'latest_round': rounds.lastOrNull});
       case ['marks'] when get:
-        _json(request.response, 200, {
-          'latest_round': _local.directory.rounds().lastOrNull,
-          'items': await workItems(_local, all: true, imageAt: _roundUrl),
-        });
+        _json(
+          request.response,
+          200,
+          (await workItems(_local, all: true, imageAt: _roundUrl)).toJson(),
+        );
       case ['marks'] when post:
         final json = await _object(request);
         final body = JsonReader(json, 'request');

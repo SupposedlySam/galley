@@ -164,7 +164,7 @@ void main() {
     expect(answered.status, MarkStatus.answered);
 
     // Round 2 carries the mark; then the reviewer verifies it there.
-    final placed = await ownerGalley.marks();
+    final placed = (await ownerGalley.marks()).whole;
     expect(placed.map((p) => (p.mark.id, p.round, p.carried.placement.name)), [
       (raised.mark.id, 1, 'raised'),
     ]);
@@ -175,7 +175,7 @@ void main() {
     final verified = await rae.record(raised.mark.id, (at) => Verified(by: 'Rae', at: at));
     expect(verified.status, MarkStatus.verified);
 
-    final now = await rae.marks();
+    final now = (await rae.marks()).whole;
     expect(now.map((p) => (p.mark.id, p.round)), [(raised.mark.id, 2)]);
     expect(now.single.mark.history.map((e) => (e.runtimeType, e.by)), [
       (Answered, 'Owner'),

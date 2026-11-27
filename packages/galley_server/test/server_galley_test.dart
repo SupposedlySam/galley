@@ -292,7 +292,7 @@ void main() {
         by: 'Rae',
       )).mark;
       // Not yet carried: Raised, in the round it was raised on.
-      var placed = await owner.marks();
+      var placed = (await owner.marks()).placed;
       expect(placed.map((p) => (p.mark.id, p.round, p.raisedIn, p.carried.placement.name)), [
         (m.id, 1, 1, 'raised'),
       ]);
@@ -316,7 +316,7 @@ void main() {
       expect(answered.history.single.by, 'Owner');
       await rae.record(m.id, (at) => Reopened('still tight', by: 'Rae', at: at));
 
-      placed = await rae.marks();
+      placed = (await rae.marks()).placed;
       expect(placed.map((p) => (p.mark.id, p.round, p.raisedIn, p.carried.placement.name)), [
         (m.id, 2, 1, 'unplaced'),
       ]);
@@ -349,23 +349,109 @@ void main() {
         );
       }
       fake.signedOut.clear();
-      expect(await as('u1', 'owner@x.test').marks(), isEmpty, reason: 'the control');
+      final control = await as('u1', 'owner@x.test').marks();
+      expect(control.placed, isEmpty, reason: 'the control');
+      expect(control.damaged, isEmpty, reason: 'the control');
     });
 
-    test('a mark by someone who is not a member is damage, not a mark by nobody', () async {
-      fake.addRound(1, roundFiles());
-      final m = (await as(
-        'u2',
-        'rae@x.test',
-      ).raise(frame: home, target: const AtPoint(20, 20), note: 'tight', by: 'Rae')).mark;
-      fake.marks.single['author'] = 'u7';
-      await expectLater(
-        as('u1', 'owner@x.test').marks(),
-        throwsA(
-          isA<Refused>()
-              .having((r) => r.kind, 'kind', RefusalKind.damaged)
-              .having((r) => r.message, 'message', allOf(contains('u7'), contains(m.id))),
-        ),
+    group('a mark that does not read', () {
+      // Three marks raised on round 1 and carried into round 2; then one of them is made to not
+      // read in each way a row can, and the other two are read.
+      Future<List<Mark>> three() async {
+        fake.addRound(1, roundFiles());
+        final rae = as('u2', 'rae@x.test');
+        final marks = [
+          for (final note in ['tight', 'small', 'grey'])
+            (await rae.raise(
+              frame: home,
+              target: const AtPoint(20, 20),
+              note: note,
+              by: 'Rae',
+            )).mark,
+        ];
+        fake.addRound(
+          2,
+          roundFiles(),
+          placements: Placements([
+            for (final m in marks) Carried(m, const Unplaced('its frame has no tree'), m.anchor),
+          ]).toJson(),
+        );
+        return marks;
+      }
+
+      Future<(List<(String, int?)>, List<(String, String)>)> read() async {
+        final r = await as('u1', 'owner@x.test').marks();
+        return (
+          [for (final p in r.placed) (p.mark.id, p.round)],
+          [for (final d in r.damaged) (d.id, d.why)],
+        );
+      }
+
+      test('by someone who is not a member is listed damaged, and the rest are read', () async {
+        final [a, b, c] = await three();
+        fake.marks[1]['author'] = 'u7';
+        final (placed, damaged) = await read();
+        expect(placed, [(a.id, 2), (c.id, 2)], reason: 'round 2 still places the other two');
+        expect(damaged, [(b.id, 'u7, who wrote to mark ${b.id}, is not a member')]);
+      });
+
+      test('with an event by someone who is not a member, likewise', () async {
+        final [a, b, c] = await three();
+        await as('u1', 'owner@x.test').record(
+          c.id,
+          (at) => Answered(
+            Answer.wontFix(note: 'by design'),
+            by: 'Owner',
+            at: at,
+          ),
+        );
+        fake.events.single['author'] = 'u7';
+        final (placed, damaged) = await read();
+        expect(placed, [(a.id, 2), (b.id, 2)]);
+        expect(damaged, [(c.id, 'u7, who wrote to mark ${c.id}, is not a member')]);
+      });
+
+      test('whose row does not read, likewise', () async {
+        final [a, b, c] = await three();
+        fake.marks[0]['pin'] = 'not a pin';
+        final (placed, damaged) = await read();
+        expect(placed, [(b.id, 2), (c.id, 2)]);
+        expect(damaged.single.$1, a.id);
+        expect(damaged.single.$2, startsWith("the server's mark ${a.id} does not read: "));
+      });
+
+      test('raised on a round that is not finished, and placed by none, likewise', () async {
+        fake.addRound(1, roundFiles());
+        final rae = as('u2', 'rae@x.test');
+        final [a, b] = [
+          for (final note in ['tight', 'small'])
+            (await rae.raise(
+              frame: home,
+              target: const AtPoint(20, 20),
+              note: note,
+              by: 'Rae',
+            )).mark,
+        ];
+        fake.marks[1]['round'] = 'r-unfinished';
+        final (placed, damaged) = await read();
+        expect(placed, [(a.id, 1)]);
+        expect(damaged, [(b.id, 'mark ${b.id} was raised on a round that is not finished')]);
+      });
+
+      test(
+        'placed by a round that names a mark the galley does not have refuses the read',
+        () async {
+          final [a, _, _] = await three();
+          fake.marks.removeAt(0);
+          await expectLater(
+            as('u1', 'owner@x.test').marks(),
+            throwsA(
+              isA<Refused>()
+                  .having((r) => r.kind, 'kind', RefusalKind.damaged)
+                  .having((r) => r.message, 'message', contains(a.id)),
+            ),
+          );
+        },
       );
     });
   });

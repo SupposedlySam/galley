@@ -9,6 +9,12 @@ patch (DESIGN D8).
 - `PlacedMark.raisedIn`: the round the mark was raised on, beside the round it was last placed
   in. Null when no galley records it: a hand-written mark, or work items written before
   0.3.10. Work items carry it as `raised_in`, read back as null when absent.
+- `Galley.marks` returns `GalleyMarks`, not a list: the marks `placed`, and those `damaged`
+  (`DamagedMark`, an id and why), so one mark that does not read no longer refuses every
+  other one (DESIGN D15). `GalleyMarks.whole` is the placed marks, refused while any is
+  damaged, for a writer that must carry every mark. `workItems` returns `WorkItems`, whose
+  JSON is `{latest_round, items, damaged}`; `GalleyMarks.fromJson` reads it back and requires
+  `damaged`. Not breaking under D8: an app's host does not implement or call `Galley`.
 
 ## 0.3.9 (unreleased)
 

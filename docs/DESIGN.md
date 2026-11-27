@@ -651,10 +651,22 @@ it cannot disagree with it.
   the validator has a bug, that mark is listed with the reason, and the others are read.
   Locally, D12 refuses the whole galley, because the owner is its only writer and should fix
   it. On a server, one bad record must not hide every other member's marks (an unknown is
-  never nothing, but it is not everything either). *Not built yet (0.3.9):* `Galley.marks`
-  has no form for a damaged mark, so the client refuses the read as `Refused.damaged`, naming
-  the mark and why. It never drops the mark. The form comes with the canvas on the server,
-  which is what shows it.
+  never nothing, but it is not everything either). `Galley.marks` gives `GalleyMarks`: the
+  marks `placed`, and those `damaged`, each by its id with why. A mark row that does not read,
+  or one written by someone who is not a member, is damaged, as is an event of it by
+  someone who is not. A round's placement of a damaged mark is left out with it, since it
+  is read with its mark; a placement of a mark the galley does not have at all is still
+  refused, and so is a mark row with no id, which cannot be named. `pull` lists the damaged
+  after the others, `pull --json` and `GET /api/marks` give them as `damaged`, and the
+  canvas lists them after what waits on the reviewer, counted apart. A writer that must
+  carry every mark reads `GalleyMarks.whole`, which refuses while any mark is damaged: a
+  push asks it before it renders and again before it makes the round, so it never leaves an
+  unfinished round that the finish would refuse. Mending a mark is the superuser's.
+  *Corrected 2026-11-27:* in 0.3.9 this was not built, and the client refused the whole read
+  as `Refused.damaged`, naming the mark. Rejected then, and still rejected: dropping the mark.
+  *Mutation, 2026-11-27:* 17 mutants across the four packages. Two survived until tests reached
+  them: the list's "Every mark" heading with damaged marks and no queue, and the read at the
+  finish, reached by a mark damaged while the files upload. All are killed.
 - **A round is finished last, and whole.** `galley push`:
   1. creates the round with its frame keys and manifest;
   2. uploads its files in parallel;

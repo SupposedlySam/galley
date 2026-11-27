@@ -36,11 +36,7 @@ class SidePanel extends StatelessWidget {
       ),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Text(
-          'Round ${shown.n} · ${shown.round.frames.length} frames · '
-          '${shown.marks.length} ${shown.marks.length == 1 ? 'mark' : 'marks'}',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        child: Text(_counts(shown), style: Theme.of(context).textTheme.bodySmall),
       ),
       const Divider(height: 24),
       Expanded(
@@ -51,6 +47,18 @@ class SidePanel extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// The round shown, and how many marks it lists: those that do not read counted apart, so
+/// the count of marks is never read as all of them.
+String _counts(Shown shown) {
+  String n(int count, String one, String many) => '$count ${count == 1 ? one : many}';
+  return [
+    'Round ${shown.n}',
+    n(shown.round.frames.length, 'frame', 'frames'),
+    n(shown.marks.length, 'mark', 'marks'),
+    if (shown.damaged.isNotEmpty) n(shown.damaged.length, 'that does not read', 'that do not read'),
+  ].join(' · ');
 }
 
 /// Who a member on a server is reviewing as, and the way out.
@@ -124,7 +132,8 @@ class MarkList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (shown.marks.isEmpty) {
+    final damaged = shown.damaged;
+    if (shown.marks.isEmpty && damaged.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(16),
         child: Text('No marks yet. Click a widget in a frame to raise one.'),
@@ -153,8 +162,26 @@ class MarkList extends StatelessWidget {
               },
             ),
           const Divider(height: 16),
-          heading('Every mark'),
         ],
+        // After what waits on the reviewer, before every mark: a mark that does not read has no
+        // status, so it waits on nobody, and it is said here so its absence from the board is
+        // not read as no mark. Mending it is the server's superuser's, so this only says why.
+        if (damaged.isNotEmpty) ...[
+          heading('${damaged.length} ${damaged.length == 1 ? 'mark does' : 'marks do'} not read'),
+          for (final d in damaged)
+            ListTile(
+              key: ValueKey('damaged ${d.id}'),
+              leading: Icon(
+                Icons.error_outline,
+                size: 18,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(d.id),
+              subtitle: SelectableText(d.why),
+            ),
+          const Divider(height: 16),
+        ],
+        if (queue.isNotEmpty || damaged.isNotEmpty) heading('Every mark'),
         for (final m in marks)
           ListTile(
             key: ValueKey(m.mark.id),

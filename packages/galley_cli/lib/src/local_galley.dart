@@ -34,7 +34,7 @@ final class LocalGalley implements Galley {
   Uri file(int n, String path) => Uri.file(_absolute('${directory.roundPath(n)}/$path'));
 
   @override
-  Future<List<PlacedMark>> marks() async => directory.lastPlaced();
+  Future<GalleyMarks> marks() async => GalleyMarks(directory.lastPlaced());
 
   /// The latest finished round. Refused when there is none.
   int latestRound() {

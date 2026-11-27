@@ -114,6 +114,17 @@ void main() {
     );
   }
 
+  /// As a superuser mending or damaging a row by hand: says mark [markId] was written by the
+  /// user [author], whether or not they are a member. No rule lets a member do this.
+  Future<void> authorOf(String markId, String author) async {
+    final r = await inner.patch(
+      server.url.replace(path: '/api/collections/marks/records/$markId'),
+      headers: {'Authorization': await server.superuserToken(), 'content-type': 'application/json'},
+      body: jsonEncode({'author': author}),
+    );
+    expect(r.statusCode, 200, reason: r.body);
+  }
+
   group('members', () {
     test('where a user stands: outside, invited, joined, revoked, and joined again', () async {
       final owner = await signIn('stander-owner@example.com');
@@ -204,7 +215,7 @@ void main() {
     test('an empty galley is empty for a member', () async {
       final g = await galleyOfTwo();
       expect(await g.rae.rounds(), isEmpty);
-      expect(await g.rae.marks(), isEmpty);
+      expect((await g.rae.marks()).whole, isEmpty);
     });
   });
 
@@ -233,7 +244,7 @@ void main() {
       final second = await push(g.owner);
       expect(second.number, 2);
       expect(second.carried.map((c) => (c.mark.id, c.placement.name)), [(raised.mark.id, 'exact')]);
-      expect((await g.rae.marks()).map((p) => (p.mark.id, p.round)), [(raised.mark.id, 2)]);
+      expect((await g.rae.marks()).whole.map((p) => (p.mark.id, p.round)), [(raised.mark.id, 2)]);
       expect(await g.rae.rounds(), [1, 2]);
     });
 
@@ -259,7 +270,97 @@ void main() {
       expect(finishes, 2);
       expect(pushed.number, 2);
       expect(pushed.carried.map((c) => c.mark.id), [raisedId]);
-      expect((await g.owner.marks()).map((p) => (p.mark.id, p.round)), [(raisedId, 2)]);
+      expect((await g.owner.marks()).whole.map((p) => (p.mark.id, p.round)), [(raisedId, 2)]);
+    });
+
+    test('a mark that does not read is listed apart, and refuses a push before it makes a '
+        'round; mended, the push carries it', () async {
+      final g = await galleyOfTwo();
+      await push(g.owner);
+      Future<String> raise(String note) async => (await g.rae.raise(
+        frame: drawn,
+        target: const AtPoint(20, 20),
+        note: note,
+        by: 'Rae',
+      )).mark.id;
+      final kept = await raise('Cramped'), damaged = await raise('Grey');
+      final outsider = await server.ensureUser('outsider@example.com');
+      await authorOf(damaged, outsider);
+
+      final read = await g.owner.marks();
+      expect([for (final p in read.placed) p.mark.id], [kept]);
+      expect(
+        [for (final d in read.damaged) (d.id, d.why)],
+        [(damaged, '$outsider, who wrote to mark $damaged, is not a member')],
+      );
+
+      final asked = <String>[];
+      client.before = (request) async => asked.add('${request.method} ${request.url.path}');
+      await expectLater(
+        push(g.owner),
+        throwsA(
+          isA<Refused>()
+              .having((e) => e.kind, 'kind', RefusalKind.damaged)
+              .having((e) => e.message, 'message', contains('mark $damaged does not read')),
+        ),
+      );
+      expect(asked, isNotEmpty, reason: 'the marks were read');
+      expect(
+        asked.where((a) => a.startsWith('POST') || a.startsWith('PATCH')),
+        isEmpty,
+        reason: 'no round was made, nor anything sent',
+      );
+      client.before = null;
+
+      await authorOf(damaged, g.rae.session.userId);
+      final pushed = await push(g.owner);
+      expect((pushed.number, pushed.resumed), (2, false), reason: 'nothing stood unfinished');
+      expect(pushed.carried.map((c) => c.mark.id), [kept, damaged]);
+    });
+
+    test('a mark that stops reading while the files upload refuses the finish; mended, the '
+        'same push finishes the round and carries it', () async {
+      final g = await galleyOfTwo();
+      await push(g.owner);
+      final id = (await g.rae.raise(
+        frame: drawn,
+        target: const AtPoint(20, 20),
+        note: 'Grey',
+        by: 'Rae',
+      )).mark.id;
+      final outsider = await server.ensureUser('late-outsider@example.com');
+      // Read whole before the round is made, damaged as the first file lands: only the read at
+      // the finish can see it.
+      var damagedOnce = false;
+      final finishes = <String>[];
+      client.before = (request) async {
+        if (_uploading(request) && !damagedOnce) {
+          damagedOnce = true;
+          await authorOf(id, outsider);
+        }
+        if (request.method == 'PATCH' && request.url.path.contains('/collections/rounds/')) {
+          finishes.add(request.url.path);
+        }
+      };
+      await expectLater(
+        push(g.owner),
+        throwsA(
+          isA<Refused>()
+              .having((e) => e.kind, 'kind', RefusalKind.damaged)
+              .having((e) => e.message, 'message', contains('mark $id does not read')),
+        ),
+      );
+      client.before = null;
+      expect(damagedOnce, isTrue);
+      // Refused by the galley before it is asked of the server, whose hook would refuse a
+      // finish that leaves the mark out only as "not placed", without the reason.
+      expect(finishes, isEmpty, reason: 'no finish was sent');
+      expect(await g.rae.rounds(), [1], reason: 'round 2 was not finished without the mark');
+
+      await authorOf(id, g.rae.session.userId);
+      final pushed = await push(g.owner);
+      expect((pushed.number, pushed.resumed), (2, true));
+      expect(pushed.carried.map((c) => c.mark.id), [id]);
     });
 
     test(
@@ -566,6 +667,60 @@ void main() {
       expect(await rae.run(['pull', '--all']), 0);
       expect('${rae.out}', 'No marks.\n');
     });
+
+    test(
+      'pull lists a mark that does not read, with why, and push refuses until it is mended',
+      () async {
+        final ownerId = await server.ensureUser('mender@example.com');
+        final rendering = _Rendering();
+        final owner = machine('mender', renderer: rendering);
+        final url = '${server.url}';
+        expect(await owner.run(['login', url, '--email', 'mender@example.com']), 0);
+        expect(await owner.run(['link', url, '--create', 'Mended', '--alias', 'M']), 0);
+        expect(await owner.run(['push']), 0, reason: '${owner.err}');
+        final ids = <String>[];
+        for (final note in ['Cramped', 'Grey']) {
+          expect(
+            await owner.run(['mark', '--frame', '$drawn', '--at', '20,20', '--note', note]),
+            0,
+          );
+          ids.add('${owner.out}'.split(':').first);
+        }
+        final [kept, damaged] = ids;
+        final outsider = await server.ensureUser('mender-outsider@example.com');
+        await authorOf(damaged, outsider);
+        final why = '$outsider, who wrote to mark $damaged, is not a member';
+
+        expect(await owner.run(['pull']), 0, reason: '${owner.err}');
+        final lines = '${owner.out}'.split('\n');
+        expect(
+          [
+            for (final l in lines)
+              if (l.startsWith(kept) || l.startsWith(damaged)) l.split('  ').take(2).join('  '),
+          ],
+          ['$kept  open', '$damaged  does not read: $why'],
+          reason: 'the mark that reads, then the one that does not, with why',
+        );
+
+        expect(await owner.run(['pull', '--json']), 0);
+        final json = jsonDecode('${owner.out}') as Map;
+        expect(json.keys, ['latest_round', 'items', 'damaged']);
+        expect([for (final i in json['items'] as List) (i as Map)['id']], [kept]);
+        expect(json['damaged'], [
+          {'id': damaged, 'why': why},
+        ]);
+
+        expect(await owner.run(['push']), 1);
+        expect('${owner.err}', contains('mark $damaged does not read ($why)'));
+        expect('${owner.err}', contains('until it is mended'));
+        expect(rendering.renders, 1, reason: 'refused before rendering, not after');
+        expect(Directory('${owner.app}/.galley/push').existsSync(), isFalse);
+
+        await authorOf(damaged, ownerId);
+        expect(await owner.run(['push']), 0, reason: '${owner.err}');
+        expect('${owner.out}', allOf(contains('$kept  exact'), contains('$damaged  exact')));
+      },
+    );
 
     test(
       'a push that stopped keeps its render, and --resume sends it without rendering again',

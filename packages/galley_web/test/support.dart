@@ -123,6 +123,9 @@ final class FakeGalley implements Galley {
   /// Every mark, by id, and the round each was placed in (null: none).
   final marksById = <String, (Mark, int?)>{};
 
+  /// The marks the galley holds and cannot read.
+  final damaged = <DamagedMark>[];
+
   /// The round each mark was raised on, by id; the round it was placed in when absent.
   final raisedIn = <String, int?>{};
 
@@ -156,16 +159,16 @@ final class FakeGalley implements Galley {
   Uri file(int n, String path) => Uri.parse('http://galley.test/api/rounds/$n/$path');
 
   @override
-  Future<List<PlacedMark>> marks() async {
+  Future<GalleyMarks> marks() async {
     _check();
-    return [
+    return GalleyMarks([
       for (final (m, round) in marksById.values)
         PlacedMark(
           round,
           Carried(m, round == null ? const Unplaced('no round') : const Raised(), m.anchor),
           raisedIn: raisedIn.containsKey(m.id) ? raisedIn[m.id] : round,
         ),
-    ];
+    ], damaged: damaged);
   }
 
   @override

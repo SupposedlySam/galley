@@ -27,10 +27,7 @@ final class ServedGalley implements Galley {
   Uri file(int n, String path) => _api(['rounds', '$n', ...path.split('/')]);
 
   @override
-  Future<List<PlacedMark>> marks() async {
-    final r = JsonReader(await _get(_api(['marks'])), 'marks');
-    return r.readList('items', PlacedMark.fromJson);
-  }
+  Future<GalleyMarks> marks() async => GalleyMarks.fromJson(await _get(_api(['marks'])), 'marks');
 
   @override
   Future<({Mark mark, WidgetNode node, int round})> raise({

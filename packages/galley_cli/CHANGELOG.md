@@ -9,6 +9,13 @@ patch (DESIGN D8).
 - `galley pull --json` gives each mark's `raised_in`, the round it was raised on, beside
   `round`, where it was last placed. On this machine it is the first round whose placements
   record the mark as raised; a mark no round records is `null`.
+- A mark on the server that does not read is listed apart, not a refusal of every mark
+  (DESIGN D15): `galley pull` prints `<id>  does not read: <why>` after the others, and
+  `pull --json` and `GET /api/marks` give `damaged: [{id, why}]` beside `items` (always
+  present; empty on this machine, where a galley that does not read is refused whole, D12).
+  `galley push` refuses while one is damaged, before it renders.
+- The canvas lists the marks that do not read, with why, after what waits on you, and its
+  count says how many. "1 frames" reads "1 frame".
 
 The reviewer's side of the canvas (ROADMAP step 7):
 - What waits on you: above every mark, the marks you raised that were answered, the one

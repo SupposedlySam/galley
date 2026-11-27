@@ -108,7 +108,8 @@ void main() {
   test('a work item names its image by a clean absolute path, or null when it has none', () async {
     await local().raise(frame: drawn, target: const AtNode([0]), note: 'a', by: 'r');
     await local().raise(frame: blank, target: const AtNode([0]), note: 'b', by: 'r');
-    final items = await workItems(local());
+    final WorkItems(:items, :damaged) = await workItems(local());
+    expect(damaged, isEmpty, reason: 'a local galley that reads has no mark that does not');
     expect([for (final i in items) i['id']], ['m1', 'm2']);
     final image = items[0]['image']! as String;
     expect(image, isNot(contains('/./')));

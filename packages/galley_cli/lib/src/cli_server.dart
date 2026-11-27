@@ -269,6 +269,11 @@ final class _Push extends _LinkedCommand {
           'pushes it; remove the directory to render anew',
         );
       }
+      // A mark that does not read refuses the push (RoundPush), so it is asked before the
+      // render, which takes minutes, rather than after it, which would keep a render that
+      // cannot be pushed until the mark is mended. RoundPush asks again: the marks may change
+      // while this renders.
+      (await linked.galley.marks()).whole;
       // A render with no index.json never finished, so no push began from it: it is replaced.
       if (pending.existsSync()) pending.deleteSync(recursive: true);
       final exit = await c

@@ -7,6 +7,13 @@ patch (DESIGN D8).
 ## 0.3.10 (unreleased)
 
 - `ServerGalley.marks` gives each mark's `raisedIn`: the round its row was raised on.
+- `ServerGalley.marks` lists a mark that does not read as damaged, with why, and reads the
+  others (DESIGN D15). A mark row that does not read, a mark or an event by someone who is
+  not a member, and a mark raised on a round that is not finished are each damaged; in 0.3.9
+  any of them refused the whole read. A round's placement of a damaged mark is left out; one
+  naming a mark the galley does not have still refuses the read.
+- `RoundPush.push` refuses while a mark is damaged before it creates the round, not only at
+  the finish, so it no longer leaves an unfinished round standing that the finish refused.
 
 ## 0.3.9 (unreleased)
 

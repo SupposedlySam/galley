@@ -236,7 +236,7 @@ void main() {
       expect(find.text('Reviewing as Rae (rae@example.com)'), findsOneWidget);
       // No name field: the server signs with the alias.
       expect(find.widgetWithText(TextField, 'Reviewing as'), findsNothing);
-      expect(find.text('Round 1 · 1 frames · 0 marks'), findsOneWidget);
+      expect(find.text('Round 1 · 1 frame · 0 marks'), findsOneWidget);
 
       await tester.tap(find.text('Sign out'));
       await tester.pump();

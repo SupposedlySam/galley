@@ -218,7 +218,7 @@ void main() {
           ),
           PlacedMark(2, Carried(buttonMark('retired', home), const Retired(), anchor), raisedIn: 1),
         ];
-        final shown = Shown(2, round, Board.of(round.frames), marks);
+        final shown = Shown(2, round, Board.of(round.frames), GalleyMarks(marks));
 
         expect(shown.pinnedOn(home).map((p) => p.mark.id), ['m']);
         expect(shown.pinnedOn(keyOf('other', pixel7)), isEmpty);

@@ -43,5 +43,12 @@ in its place.
 
 ```json
 {"latest_round": 2, "items": [{"id": "m3f…", "status": "open", "round": 2, "raised_in": 1,
-  "placement": "moved", "where": {…}, "anchor": {…}, "image": "/abs/path/frames/….png", "mark": {…}}]}
+  "placement": "moved", "where": {…}, "anchor": {…}, "image": "/abs/path/frames/….png", "mark": {…}}],
+  "damaged": []}
 ```
+
+`damaged` lists, by id and why, the marks a galley on a server holds and cannot read (a row
+edited by hand, or written by someone who is not a member). They are not work items, and
+nothing can answer them until the server's superuser mends them; while one is listed,
+`galley push` is refused. On this machine it is always empty: a local galley that does not
+read is refused whole (DESIGN D12).

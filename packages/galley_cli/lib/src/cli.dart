@@ -405,16 +405,14 @@ final class _Pull extends _GalleyCommand {
   @override
   Future<int> run() async {
     final (galley: target, by: _) = await acting(needsBy: false);
-    final latest = (await target.rounds()).lastOrNull;
     final all = _args.flag('all');
-    final items = await workItems(target, all: all);
+    final work = await workItems(target, all: all);
     if (_args.flag('json')) {
-      c.out.writeln(
-        const JsonEncoder.withIndent('  ').convert({'latest_round': latest, 'items': items}),
-      );
+      c.out.writeln(const JsonEncoder.withIndent('  ').convert(work.toJson()));
       return 0;
     }
-    if (items.isEmpty) {
+    final WorkItems(:items, :damaged) = work;
+    if (items.isEmpty && damaged.isEmpty) {
       c.out.writeln(all ? 'No marks.' : 'Nothing is waiting on an answer.');
       return 0;
     }
@@ -426,6 +424,10 @@ final class _Pull extends _GalleyCommand {
         '${i['id']}  ${i['status']}  ${i['placement']} in round ${i['round']}  ${mark['frame']}\n'
         '    "${mark['note']}" (${mark['by']})${location == null ? '' : '\n    $location'}',
       );
+    }
+    // Whatever its status: a mark that does not read has no status anyone knows.
+    for (final d in damaged) {
+      c.out.writeln('${d.id}  does not read: ${d.why}');
     }
     return 0;
   }

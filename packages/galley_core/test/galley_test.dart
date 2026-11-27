@@ -6,9 +6,10 @@ import 'rounds.dart';
 /// A galley held in memory: two rounds, where round 2's frame `a` has an image and round 1's
 /// frame `b` has none, and the marks given, each placed in the round given (null: none).
 final class MemoryGalley implements Galley {
-  MemoryGalley(this.placed, {this.base = 'file:///g/rounds'});
+  MemoryGalley(this.placed, {this.base = 'file:///g/rounds', this.damaged = const []});
 
   final List<PlacedMark> placed;
+  final List<DamagedMark> damaged;
   final String base;
 
   /// How many times each round was read.
@@ -34,7 +35,7 @@ final class MemoryGalley implements Galley {
   Uri file(int n, String path) => Uri.parse('$base/$n/$path');
 
   @override
-  Future<List<PlacedMark>> marks() async => placed;
+  Future<GalleyMarks> marks() async => GalleyMarks(placed, damaged: damaged);
 
   @override
   Future<({Mark mark, WidgetNode node, int round})> raise({
@@ -83,13 +84,16 @@ void main() {
   group('workItems', () {
     test('lists the marks waiting on an answer, or with all, every mark', () async {
       final g = MemoryGalley(population());
-      expect([for (final i in await workItems(g)) i['id']], ['m1', 'm3', 'm4']);
-      expect([for (final i in await workItems(g, all: true)) i['id']], ['m1', 'm2', 'm3', 'm4']);
+      expect([for (final i in (await workItems(g)).items) i['id']], ['m1', 'm3', 'm4']);
+      expect(
+        [for (final i in (await workItems(g, all: true)).items) i['id']],
+        ['m1', 'm2', 'm3', 'm4'],
+      );
     });
 
     test('names the image by the galley: a path for a file, the URL otherwise', () async {
       Future<List<Object?>> images(MemoryGalley g) async => [
-        for (final i in await workItems(g, all: true)) i['image'],
+        for (final i in (await workItems(g, all: true)).items) i['image'],
       ];
       // m3 has no round to look in, and m4's frame has no image: null, not a guess.
       expect(await images(MemoryGalley(population())), [
@@ -107,10 +111,10 @@ void main() {
     });
 
     test('names it by imageAt when given', () async {
-      final items = await workItems(
+      final items = (await workItems(
         MemoryGalley(population()),
         imageAt: (n, image) => 'round $n: $image',
-      );
+      )).items;
       expect(items.map((i) => i['image']), ['round 2: frames/a.png', null, null]);
     });
 
@@ -121,7 +125,7 @@ void main() {
     });
 
     test('is what PlacedMark.fromJson reads back', () async {
-      final items = await workItems(MemoryGalley(population()), all: true);
+      final items = (await workItems(MemoryGalley(population()), all: true)).items;
       final back = [for (final (i, item) in items.indexed) PlacedMark.fromJson(item, 'item $i')];
       expect(
         [
@@ -151,8 +155,65 @@ void main() {
 
   test('PlacedMark.fromJson reads work items printed before raised_in as raised on no known '
       'round', () async {
-    final item = (await workItems(MemoryGalley(population()))).first..remove('raised_in');
+    final item = (await workItems(MemoryGalley(population()))).items.first..remove('raised_in');
     final back = PlacedMark.fromJson(item, 'item');
     expect((back.round, back.raisedIn, back.mark.id), (2, null, 'm1'));
+  });
+
+  group('a mark that does not read', () {
+    final damaged = [
+      const DamagedMark('m8', 'u9, who wrote to mark m8, is not a member'),
+      const DamagedMark('m9', 'it does not read'),
+    ];
+
+    test('is listed apart, with all or without, beside the marks that read', () async {
+      final g = MemoryGalley(population(), damaged: damaged);
+      for (final all in [false, true]) {
+        final work = await workItems(g, all: all);
+        expect(work.toJson().keys, ['latest_round', 'items', 'damaged']);
+        expect(work.toJson()['damaged'], [
+          {'id': 'm8', 'why': 'u9, who wrote to mark m8, is not a member'},
+          {'id': 'm9', 'why': 'it does not read'},
+        ]);
+        expect(work.items, hasLength(all ? 4 : 3), reason: 'the rest are read');
+      }
+      expect((await workItems(MemoryGalley(population()))).toJson()['damaged'], isEmpty);
+    });
+
+    test('is read back by GalleyMarks.fromJson, with every mark that reads', () async {
+      final work = await workItems(MemoryGalley(population(), damaged: damaged), all: true);
+      final back = GalleyMarks.fromJson(work.toJson(), 'marks');
+      expect([for (final p in back.placed) p.mark.id], ['m1', 'm2', 'm3', 'm4']);
+      expect(
+        [for (final d in back.damaged) (d.id, d.why)],
+        [('m8', 'u9, who wrote to mark m8, is not a member'), ('m9', 'it does not read')],
+      );
+      final old = work.toJson()..remove('damaged');
+      expect(() => GalleyMarks.fromJson(old, 'marks'), throwsFormatException);
+    });
+
+    test('refuses the whole of them to a writer that carries every mark, naming it', () {
+      final placed = population();
+      expect(GalleyMarks(placed).whole, hasLength(4));
+      Object? refusal(List<DamagedMark> d) {
+        try {
+          GalleyMarks(placed, damaged: d).whole;
+        } on Refused catch (e) {
+          return (e.kind, e.message);
+        }
+        return null;
+      }
+
+      expect(refusal(damaged), (
+        RefusalKind.damaged,
+        'mark m8 does not read (u9, who wrote to mark m8, is not a member), nor 1 more; every '
+            'mark must be carried, so this is refused until it is mended',
+      ));
+      expect(refusal(damaged.sublist(1)), (
+        RefusalKind.damaged,
+        'mark m9 does not read (it does not read); every mark must be carried, so this is '
+            'refused until it is mended',
+      ));
+    });
   });
 }

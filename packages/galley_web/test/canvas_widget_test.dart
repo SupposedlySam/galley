@@ -372,6 +372,67 @@ void main() {
     });
   });
 
+  group('a mark that does not read', () {
+    const why = 'u7, who wrote to mark m9, is not a member';
+
+    testWidgets('is listed with why, apart from the marks, and counted', (tester) async {
+      final api = apiOf([
+        buttonMark('a', _home, history: [answered]),
+        buttonMark('b', _home),
+      ])..damaged.addAll([const DamagedMark('m9', why), const DamagedMark('m10', 'no frame')]);
+      await pumpCanvas(tester, api, reviewer: 'Tester');
+      expect(find.text('Round 1 · 4 frames · 2 marks · 2 that do not read'), findsOneWidget);
+      expect(find.text('2 marks do not read'), findsOneWidget);
+      expect(
+        [
+          for (final d in ['m9', 'm10']) tester.getTopLeft(find.byKey(ValueKey('damaged $d'))).dy,
+        ],
+        everyElement(
+          allOf(
+            greaterThan(tester.getTopLeft(find.byKey(const ValueKey('queue a'))).dy),
+            lessThan(tester.getTopLeft(find.text('Every mark')).dy),
+          ),
+        ),
+        reason: 'after what waits on the reviewer, before every mark',
+      );
+      expect(find.text(why), findsOneWidget);
+      expect(find.text('no frame'), findsOneWidget);
+      expect(find.byKey(const ValueKey('a')), findsOneWidget, reason: 'the marks still listed');
+      expect(find.byKey(const ValueKey('b')), findsOneWidget);
+    });
+
+    testWidgets('alone, is not "no marks yet", and heads the list without a queue', (tester) async {
+      final api = apiOf()..damaged.add(const DamagedMark('m9', why));
+      await pumpCanvas(tester, api, reviewer: 'Tester');
+      expect(find.textContaining('No marks yet'), findsNothing);
+      expect(find.text('1 mark does not read'), findsOneWidget);
+      expect(find.text(why), findsOneWidget);
+      expect(find.textContaining('on you'), findsNothing);
+      expect(find.text('Round 1 · 4 frames · 0 marks · 1 that does not read'), findsOneWidget);
+    });
+
+    testWidgets('with marks and nothing waiting, still sets the marks apart under a heading', (
+      tester,
+    ) async {
+      final api = apiOf([buttonMark('b', _home)])..damaged.add(const DamagedMark('m9', why));
+      await pumpCanvas(tester, api, reviewer: 'Tester');
+      expect(find.textContaining('on you'), findsNothing, reason: 'no queue');
+      expect(
+        tester.getTopLeft(find.text('Every mark')).dy,
+        greaterThan(tester.getTopLeft(find.byKey(const ValueKey('damaged m9'))).dy),
+      );
+      expect(find.byKey(const ValueKey('b')), findsOneWidget);
+    });
+
+    testWidgets('none: no heading, and the count says nothing of them', (tester) async {
+      await pumpCanvas(tester, apiOf([buttonMark('b', _home)]), reviewer: 'Tester');
+      expect(find.textContaining('not read'), findsNothing);
+      expect(find.text('Every mark'), findsNothing, reason: 'nothing above the marks to part');
+      expect(find.byKey(const ValueKey('b')), findsOneWidget);
+      expect(find.text('Round 1 · 4 frames · 1 mark'), findsOneWidget);
+    });
+  });
+
   group('cropAround', () {
     const frame = (width: 400.0, height: 800.0);
     List<double> of(LogicalRect r) => [r.left, r.top, r.width, r.height];

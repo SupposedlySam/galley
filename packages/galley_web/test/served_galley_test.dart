@@ -37,11 +37,13 @@ void main() {
           'rounds': [1, 2],
         },
       ),
-      '/api/marks': (200, {'items': <Object>[]}),
+      '/api/marks': (200, {'items': <Object>[], 'damaged': <Object>[]}),
     });
 
     expect(await api.rounds(), [1, 2]);
-    expect(await api.marks(), isEmpty);
+    final marks = await api.marks();
+    expect(marks.placed, isEmpty);
+    expect(marks.damaged, isEmpty);
 
     expect(asked.map((r) => '${r.method} ${r.url}'), [
       'GET http://localhost:7399/api/galley',

@@ -260,7 +260,9 @@ final class Unavailable extends CanvasState {
 /// Round [n] on [board], with every mark.
 final class Shown extends CanvasState {
   /// A round shown.
-  Shown(this.n, this.round, this.board, List<PlacedMark> marks) : marks = List.unmodifiable(marks);
+  Shown(this.n, this.round, this.board, GalleyMarks marks)
+    : marks = marks.placed,
+      damaged = marks.damaged;
 
   /// Which round.
   final int n;
@@ -273,6 +275,10 @@ final class Shown extends CanvasState {
 
   /// Every mark, wherever it was last placed.
   final List<PlacedMark> marks;
+
+  /// The marks the galley holds and could not read: listed with why, never left out, so a
+  /// reviewer does not take a mark that does not read for a mark that was never raised.
+  final List<DamagedMark> damaged;
 
   /// The marks drawn on [frame]: placed in this round, on a widget there.
   List<PlacedMark> pinnedOn(FrameKey frame) => [
@@ -292,7 +298,7 @@ final class Shown extends CanvasState {
   };
 
   /// The same round with [marks] as they are now.
-  Shown withMarks(List<PlacedMark> marks) => Shown(n, round, board, marks);
+  Shown withMarks(GalleyMarks marks) => Shown(n, round, board, marks);
 }
 
 /// The frame a mark was raised on, as it was then, or why it cannot be shown.

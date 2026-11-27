@@ -77,6 +77,11 @@ final class RoundPush {
     final manifest = [for (final f in files) f._entry];
     final repeated = _repeated(files);
     if (repeated != null) throw Refused.invalid('the round lists $repeated twice');
+    // Before the round is made, not only at its finish: a mark that does not read cannot be
+    // carried, so the finish would be refused, and the round made for it would stand
+    // unfinished, refusing every other push until it is finished or a superuser removes it.
+    // The finish reads the marks again; this read only refuses early.
+    (await galley.marks()).whole;
     final (:id, :number, :resumed) = await _roundFor(frames, manifest);
     final server = galley.server, token = galley.session.token;
 
@@ -119,7 +124,7 @@ final class RoundPush {
     await Future.wait([for (var i = 0; i < uploadsAtOnce; i++) worker()]);
 
     for (var attempt = 1; ; attempt++) {
-      final marks = await galley.marks();
+      final marks = (await galley.marks()).whole;
       final carried = round.carryAll([for (final m in marks) m.carried]);
       try {
         await server.send(
@@ -135,7 +140,7 @@ final class RoundPush {
         // Rejected: reading the refusal's words to tell the two apart; they are the server's
         // to change, and the marks themselves say whether one is new.
         final known = {for (final m in marks) m.mark.id};
-        final now = await galley.marks();
+        final now = (await galley.marks()).whole;
         final grown = now.any((m) => !known.contains(m.mark.id));
         if (!grown || attempt >= finishTries) rethrow;
       }
