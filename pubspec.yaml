@@ -7,3 +7,4 @@ environment:
 workspace:
   - packages/galley_core
   - packages/galley
+  - packages/galley_cli

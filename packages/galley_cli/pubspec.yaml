@@ -1,0 +1,26 @@
+name: galley_cli
+description: "The galley command: packs an app's rounds, carries every mark into each one, and records answers. Pure Dart."
+version: 0.3.3
+repository: https://github.com/SupposedlySam/galley/tree/main/packages/galley_cli
+issue_tracker: https://github.com/SupposedlySam/galley/issues
+topics: [design, review, cli]
+# Until the pub.dev release (docs/DESIGN.md D8), which also replaces the galley_core path below.
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+executables:
+  galley: galley
+
+dependencies:
+  args: ^2.7.0
+  # Never Flutter (docs/DESIGN.md D1): the CLI reads rounds, it does not render them. `pack`
+  # runs the app's own `flutter test` as a child process.
+  galley_core:
+    path: ../galley_core
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.26.0
