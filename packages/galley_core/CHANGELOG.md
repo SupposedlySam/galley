@@ -4,6 +4,15 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.3
+
+- New: `StoredRound.read(RoundFiles)` reads a round as stored: its provenance (Unrecorded for a
+  round packed before 0.3.2), its index, its records and their trees. A missing tree leaves
+  its frame treeless, so its marks are Unplaced; a missing record or a malformed file is
+  refused.
+- New: `Placements`, where every mark is in one round, at most once each, as JSON.
+- New: `Round.frame(key)`.
+
 ## 0.3.2
 
 - New: `RoundProvenance`, a round's `round.json`: the commit, whether the tree was dirty, the

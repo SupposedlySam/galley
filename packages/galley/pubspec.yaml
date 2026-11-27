@@ -1,6 +1,6 @@
 name: galley
 description: "Renders every screen × state × device of a Flutter app as a reviewable frame, inside the app's own flutter test."
-version: 0.3.2
+version: 0.3.3
 repository: https://github.com/SupposedlySam/galley/tree/main/packages/galley
 issue_tracker: https://github.com/SupposedlySam/galley/issues
 topics: [design, testing, screenshots, review]

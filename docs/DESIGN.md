@@ -29,8 +29,8 @@ packages/
                    Depends on nothing but the Dart SDK.
   galley/          Flutter, test-time. GalleyHost + FrameSource contracts, built-in axes,
                    the packer. Depends on galley_core and flutter_test.
-  galley_cli/      planned: `galley pack | push | pull | answer`. Depends on galley_core,
-                   never on Flutter.
+  galley_cli/      `galley pack | mark | pull | answer | verify | reopen` on a local galley
+                   (D12); `push` with the server. Depends on galley_core, never on Flutter.
 apps/
   galley_server/   planned: the backend (D7). Depends on galley_core's wire types.
   galley_web/      planned: the reviewer canvas (Flutter web). Depends on galley_core.
@@ -240,7 +240,7 @@ GitHub repo. Before pub.dev, an app pins a tag:
 ```yaml
 dev_dependencies:
   galley:
-    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.2}
+    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.3}
 ```
 
 - **Why not a path dependency:** CI and fresh clones have no sibling checkout, so `pub get`
@@ -348,3 +348,52 @@ this commit", and a round that names its commit is how a reviewer knows the fix 
   against real git in temp checkouts. Not tested: git exiting 0 with something that is not a
   SHA, which real git cannot be made to do. The guard is there so that a round would say so
   rather than fail.
+
+## D12 · A galley is a directory, and `galley_cli` keeps it (2026-11-26)
+
+Until the server (D7), a galley is a directory, `.galley/` in the app's root by default
+(`galley_cli/lib/src/galley_directory.dart`):
+
+```
+.galley/
+  marks/<id>.json              one mark each, its history only ever appended to
+  rounds/<n>/                  a round as the packer wrote it
+  rounds/<n>/placements.json   where every mark is in that round
+```
+
+`galley pack` renders round n+1 by running the app's galley test with `GALLEY_OUT` set
+(D3), reads it back through `StoredRound` in galley_core, and carries every mark into it from
+the round that last placed it. `mark`, `pull`, `answer`, `verify` and `reopen` work on it.
+
+- **One file per mark.** Two people answering two marks never write the same file. Rejected:
+  one `marks.json`, where every answer rewrites every mark.
+- **A mark is only ever appended to.** `saveMark` refuses a write that changes the note, the
+  anchor or a past event. Rejected: trusting each command to append; a command that rebuilt a
+  mark from its arguments would drop its history without a word.
+- **Placements are per round.** The next round is carried from the round that last placed
+  each mark, so a round that rendered and was never carried (a pack killed in between) is
+  skipped, not read as "every mark is gone". `placements(n)` is null for such a round, never
+  an empty list.
+- **A round that did not finish is refused and kept.** No `index.json` means the galley test
+  died. `pack` exits 1, says where the partial round is, and the next round is numbered past
+  it rather than writing over it.
+- **A round with error frames is a round.** `pack` exits 0 when the round was written, and
+  says that the test exited non-zero: each error frame failed its test (D10), and its marks
+  are Unplaced, not Lost.
+- **Ids are random** (`m` + 12 hex digits). Rejected: a counter. Two people marking the same
+  galley offline would both make `m3`.
+- **`answer fixed` stores the full SHA, and checks it is a commit** in the app's repository.
+  A short SHA unique today can be ambiguous next year, and a fix in a commit that does not
+  exist cannot be verified.
+- **`.galley/` must be ignored or committed.** Provenance is read before the round is written
+  (D11), but the earlier rounds are already there: an untracked `.galley/` makes every round
+  after the first look dirty. Ignoring it is the expected case; the server will hold the
+  galley.
+- **The reader is in galley_core** (`StoredRound` over a `RoundFiles` interface), so the
+  server and the viewer read a round the same way the CLI does. A missing tree leaves its
+  frame treeless (its marks Unplaced); a malformed one is refused, because a packer bug must
+  not read as an app with no widgets.
+- *Mutation, 2026-11-26:* 12 of 12 mutants of `StoredRound` and `Placements`, and 35 of 35 of
+  the CLI and the galley directory, are killed. One test packs the galley package's toy round
+  twice with the real `flutter test`. Not tested: a write killed between the temp file and
+  its rename.

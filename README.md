@@ -4,14 +4,16 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.2, the renderer.** Galley renders and records a round of frames from inside an
-app's own `flutter test`, and its core carries marks from one round into the next. The canvas,
-server and CLI that reviewers use are not built yet ([the plan](docs/ROADMAP.md)).
+**Status: 0.3.3, the local loop.** Galley renders and records a round of frames from inside an
+app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local galley: pack,
+mark, pull, answer, verify, with every mark carried into the next round. The canvas and the
+server that reviewers use are not built yet ([the plan](docs/ROADMAP.md)).
 
 | Package | What it is |
 |---|---|
 | [`galley`](packages/galley) | Flutter, test-time. The `GalleyHost` an app implements, the built-in axes, the renderer and the packer. |
-| [`galley_core`](packages/galley_core) | Pure Dart. Frame keys, frame trees, anchors and re-anchoring, marks, the round planner and frame records. |
+| [`galley_core`](packages/galley_core) | Pure Dart. Frame keys, frame trees, anchors and re-anchoring, marks, the round planner, frame records and the stored round. |
+| [`galley_cli`](packages/galley_cli) | Dart. The `galley` command: a local galley of rounds and marks. |
 
 ## Adopting it
 
@@ -23,7 +25,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.2
+      ref: v0.3.3
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -90,6 +92,36 @@ Then `flutter test --run-skipped test/galley_test.dart` runs it. Galley does not
 when `GALLEY_OUT` is unset, because that is how it runs as a CI check, and an unset value must
 not quietly turn the check off.
 
+## Running rounds: `galley_cli`
+
+`galley_cli` keeps a galley in `.galley/` and runs the round for you (DESIGN D12). Add it next
+to `galley`, at the same tag:
+
+```yaml
+dev_dependencies:
+  galley_cli:
+    git:
+      url: https://github.com/SupposedlySam/galley
+      path: packages/galley_cli
+      ref: v0.3.3
+```
+
+Add `.galley/` to `.gitignore`. Otherwise the earlier rounds make every later round look as if
+the tree had uncommitted changes.
+
+```sh
+dart run galley_cli:galley pack                    # renders round n+1, carries every mark into it
+dart run galley_cli:galley mark --frame '<key>' --node 0.2 --note 'too tight' --by me
+dart run galley_cli:galley pull --json             # open marks, where each is now, with its PNG
+dart run galley_cli:galley answer <mark> fixed --commit <sha> --by me
+dart run galley_cli:galley verify <mark> --by me   # or: reopen <mark> --note '...' --by me
+```
+
+`pack` runs `flutter test test/galley_test.dart` (`--test` to change it) and prints how many
+frames rendered, the commit, and where every mark landed: exact, moved, lost, unplaced or
+retired. `--by` defaults to `GALLEY_BY`. Reviewers will mark on the canvas; `mark` is for the
+app's owner and for tests.
+
 ## What a round contains
 
 `GALLEY_OUT` gets `index.json`, `round.json` (the commit, whether the tree had uncommitted
@@ -124,6 +156,7 @@ flutter pub get
 dart format -l 100 packages
 (cd packages/galley_core && dart analyze && dart test)
 (cd packages/galley && flutter analyze && flutter test)
+(cd packages/galley_cli && dart analyze && dart test)
 ```
 
 ## License

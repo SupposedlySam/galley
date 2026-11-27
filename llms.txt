@@ -1,9 +1,10 @@
 # Galley
 
 > Galley renders every screen × state × device of a Flutter app as a frame, from inside the
-> app's own `flutter test`, for design review. Version 0.3.2 is the renderer: it writes a round
-> of PNGs, widget trees, frame records and the round's provenance to disk, and its core carries marks from one round
-> into the next. The review canvas, server and CLI are not built yet (docs/ROADMAP.md).
+> app's own `flutter test`, for design review. Version 0.3.3 is the local loop: the renderer writes a round
+> of PNGs, widget trees, frame records and the round's provenance to disk, and `galley_cli` keeps
+> rounds and marks in a local `.galley/`, carrying every mark into the next round. The review
+> canvas and server are not built yet (docs/ROADMAP.md).
 
 An app adopts Galley by writing one `GalleyHost` subclass in `test/` and calling
 `galley(host)` from a test's `main`. The host declares scenarios (a name and the uris it
@@ -16,21 +17,27 @@ landing on another uri (read from the app's `Router`) makes it an error. Workaro
 findings: `landing-unknown`, `frozen`, `missing-font`, `default-font`, `network-image`,
 `unpainted`, `broken-word`, `broken-word-unseen`.
 
+`dart run galley_cli:galley pull --json` lists the open marks as work items: id, status,
+placement, the frame's PNG and the widget's source location. Answer each with `galley answer
+<id> fixed --commit <sha>`, `wont-fix --note`, or `question --note`.
+
 Galley never imports an app, and frames never reach a real backend. An unknown is never
 reported as nothing.
 
 ## Docs
 
 - [README](README.md): adopting Galley, the host, running a round, what a round contains
-- [Design decisions](docs/DESIGN.md): principles and decisions D1–D11, with what each rejected
+- [Design decisions](docs/DESIGN.md): principles and decisions D1–D12, with what each rejected
 - [Boundary](docs/BOUNDARY.md): what Galley assumes about Flutter 3.50, with citations
 
 ## Packages
 
 - [galley](packages/galley/README.md): the Flutter, test-time package an app depends on
-- [galley_core](packages/galley_core/README.md): the pure-Dart model: frame keys, trees, anchors, re-anchoring, marks, planner, records
+- [galley_core](packages/galley_core/README.md): the pure-Dart model: frame keys, trees, anchors, re-anchoring, marks, planner, records, the stored round
+- [galley_cli](packages/galley_cli/README.md): the `galley` command: pack, mark, pull --json, answer, verify, reopen
 
 ## Optional
 
 - [galley changelog](packages/galley/CHANGELOG.md)
 - [galley_core changelog](packages/galley_core/CHANGELOG.md)
+- [galley_cli changelog](packages/galley_cli/CHANGELOG.md)

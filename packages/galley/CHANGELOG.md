@@ -4,6 +4,11 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.3
+
+- No change to the renderer. Released with `galley_cli` 0.3.3, which runs this package's galley
+  test to pack a round (DESIGN D12).
+
 ## 0.3.2
 
 - The round now has a `round.json`: the commit the app was rendered from, whether its tree had
