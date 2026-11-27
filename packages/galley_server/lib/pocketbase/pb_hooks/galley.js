@@ -104,4 +104,17 @@ function newest(app, galley, finished) {
   return rounds.length ? rounds[0].getInt("number") : null;
 }
 
-module.exports = { judge, json, members, markRow, history, newest };
+/// The numbers of [galley]'s finished rounds, lowest first.
+function finished(app, galley) {
+  return app
+    .findRecordsByFilter("rounds", "galley = {:g} && finished = true", "number", 0, 0, { g: galley })
+    .map((r) => r.getInt("number"));
+}
+
+/// A visits row as galley_core's Visit reads it: an unset `before` is stored as 0, and is none.
+function visitOf(record) {
+  const latest = record.getInt("latest"), before = record.getInt("before");
+  return before === 0 ? { latest } : { latest, before };
+}
+
+module.exports = { judge, json, members, markRow, history, newest, finished, visitOf };

@@ -139,6 +139,7 @@ Future<FrameRecord> _renderTwice(
     errors: errors,
     findings: first.findings,
     image: image,
+    pixels: image == null ? null : first.pixels!.digest,
     tree: tree,
   );
 }

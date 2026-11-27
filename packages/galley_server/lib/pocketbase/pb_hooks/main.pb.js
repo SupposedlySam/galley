@@ -174,6 +174,44 @@ onRecordCreateExecute((e) => {
   });
 }, "members");
 
+// A member's first visit: to a finished round of their galley, and only one, kept after.
+onRecordCreateExecute((e) => {
+  const g = require(`${__hooks}/galley.js`);
+  e.app.runInTransaction((tx) => {
+    const member = tx.findRecordById("members", e.record.getString("member"));
+    const kept = tx.findRecordsByFilter("visits", "member = {:m}", "", 1, 0, { m: member.id });
+    // Two tabs opened at once: the second reads the first's visit and updates it instead. The
+    // unique index on `member` is the second guard.
+    if (kept.length) throw new BadRequestError("this member's visit is kept already; read it again");
+    g.judge(tx, {
+      write: "visit",
+      visit: g.visitOf(e.record),
+      kept: null,
+      finished: g.finished(tx, member.getString("galley")),
+    });
+    e.app = tx;
+    e.next();
+  });
+}, "visits");
+
+// A later visit: the round opened after the one kept, judged against the row as it is in this
+// transaction, not as the request found it.
+onRecordUpdateExecute((e) => {
+  const g = require(`${__hooks}/galley.js`);
+  e.app.runInTransaction((tx) => {
+    const kept = tx.findRecordById("visits", e.record.id);
+    const member = tx.findRecordById("members", kept.getString("member"));
+    g.judge(tx, {
+      write: "visit",
+      visit: g.visitOf(e.record),
+      kept: g.visitOf(kept),
+      finished: g.finished(tx, member.getString("galley")),
+    });
+    e.app = tx;
+    e.next();
+  });
+}, "visits");
+
 // An invite: its email lower-cased, as every user's is, and a user for it, since nobody signs
 // up. The code that signs them in goes to that email.
 onRecordCreateExecute((e) => {

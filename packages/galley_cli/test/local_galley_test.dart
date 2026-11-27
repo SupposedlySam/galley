@@ -117,4 +117,70 @@ void main() {
     expect(File(image).isAbsolute, isTrue);
     expect(items[1]['image'], isNull);
   });
+
+  group('a visit', () {
+    test('is kept per reviewer: a first visit has nothing before it, a newer round the one '
+        'opened before, and a reload the same', () async {
+      writeRoundAt(g.roundPath(2));
+      writeRoundAt(g.roundPath(3));
+      final galley = local();
+      expect(await galley.opened(1, by: 'Rae'), isNull);
+      expect(await galley.opened(1, by: 'Rae'), isNull, reason: 'a reload of the first');
+      expect(await galley.opened(3, by: ' Rae '), 1, reason: 'by the name, trimmed');
+      expect(await galley.opened(3, by: 'Rae'), 1, reason: 'a reload');
+      expect(await galley.opened(2, by: 'Rae'), 1, reason: 'an older round moves nothing');
+      // Another reviewer's visits are their own.
+      expect(await galley.opened(3, by: 'Kit'), isNull);
+      expect(await galley.opened(3, by: 'Rae'), 1);
+      expect(
+        {for (final MapEntry(:key, :value) in g.visits().entries) key: value.toJson()},
+        {
+          'Rae': {'latest': 3, 'before': 1},
+          'Kit': {'latest': 3},
+        },
+      );
+    });
+
+    test('a reload writes nothing', () async {
+      final galley = local();
+      await galley.opened(1, by: 'Rae');
+      final file = File('${g.path}/visits.json');
+      final written = file.lastModifiedSync();
+      file.setLastModifiedSync(DateTime(2001));
+      await galley.opened(1, by: 'Rae');
+      expect(file.lastModifiedSync(), DateTime(2001));
+      expect(written, isNot(DateTime(2001)));
+    });
+
+    test('is refused for nobody, and for a round that has not finished, and writes '
+        'nothing', () async {
+      await expectLater(
+        local().opened(1, by: '  '),
+        throwsA(isA<Refused>().having((e) => e.kind, 'kind', RefusalKind.invalid)),
+      );
+      await expectLater(
+        local().opened(2, by: 'Rae'),
+        throwsA(
+          isA<Refused>()
+              .having((e) => e.kind, 'kind', RefusalKind.missing)
+              .having((e) => e.message, 'message', contains('no finished round 2')),
+        ),
+      );
+      expect(File('${g.path}/visits.json').existsSync(), isFalse);
+      expect(await local().opened(1, by: 'Rae'), isNull, reason: 'the control: it does write');
+      expect(File('${g.path}/visits.json').existsSync(), isTrue);
+    });
+
+    test('a visits file that does not read is refused as damaged, naming it', () async {
+      File('${g.path}/visits.json').writeAsStringSync('{"Rae": {"latest": 2, "before": 2}}');
+      await expectLater(
+        local().opened(1, by: 'Kit'),
+        throwsA(
+          isA<Refused>()
+              .having((e) => e.kind, 'kind', RefusalKind.damaged)
+              .having((e) => e.message, 'message', contains('visits.json.Rae')),
+        ),
+      );
+    });
+  });
 }

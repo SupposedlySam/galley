@@ -6,6 +6,11 @@ patch (DESIGN D8).
 
 ## 0.3.10 (unreleased)
 
+- A `visits` collection: each member's last round opened and the one before it, read and
+  written only by the member, judged by `galley_validate` (`visit`), one row per member
+  (DESIGN D17). `ServerGalley.opened` records a visit as the alias, and reads again once when
+  another tab of the same member wrote first.
+
 - `ServerGalley.marks` gives each mark's `raisedIn`: the round its row was raised on.
 - `ServerGalley.marks` lists a mark that does not read as damaged, with why, and reads the
   others (DESIGN D15). A mark row that does not read, a mark or an event by someone who is

@@ -8,6 +8,7 @@ import 'refused.dart';
 import 'write_rules.dart';
 import 'round.dart';
 import 'stored_round.dart';
+import 'visit.dart';
 
 /// A galley, wherever it is kept: its finished rounds, every mark where it was last placed, and
 /// the two writes a person makes, raising a mark and recording an event on one.
@@ -50,6 +51,14 @@ abstract interface class Galley {
   /// (D13). A galley behind a server builds the event with its own clock to send it, and the
   /// mark it returns has the server's time.
   Future<Mark> record(String id, MarkEvent Function(DateTime at) event);
+
+  /// Records that [by] opened round [n], and returns the round they had opened before it, to
+  /// be shown what changed since (D17): null on their first visit. See [Visit] and [visitTo].
+  ///
+  /// Opening the same round again returns the same round as the first time, so a reload shows
+  /// the same changes. On a server, [by] is the member signed in, and the visit is theirs
+  /// whatever [by] says: the server keeps it by their account, as it keeps their marks.
+  Future<int?> opened(int n, {required String by});
 }
 
 /// Every mark of a galley as read: those that read, where each was last placed, and those that

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:galley_core/galley_core.dart';
 import 'package:galley_web/src/board.dart';
@@ -313,6 +315,118 @@ void main() {
         ['later', 'theirs'],
         reason: 'selected, then the queue',
       );
+    });
+  });
+
+  group('since your last visit', () {
+    final coffees = keyOf('coffees', pixel7);
+    final brew = keyOf('brew', pixel7);
+    final me = keyOf('me', pixel7);
+    final away = keyOf('away', pixel7);
+    String digest(String c) => c * 64;
+
+    /// Round 1: home, coffees, brew and away. Round 2: home the same, coffees changed, brew
+    /// with no digest, me new, and away gone.
+    FakeGalley twoRounds() => FakeGalley(
+      roundsList: [1],
+      byRound: {
+        1: roundFiles(
+          [home, coffees, brew, away],
+          pixels: {home: digest('a'), coffees: digest('b'), brew: digest('c'), away: digest('d')},
+        ),
+        2: roundFiles(
+          [home, coffees, brew, me],
+          pixels: {home: digest('a'), coffees: digest('e'), me: digest('f')},
+        ),
+      },
+    );
+
+    List<String> changes(Since since) => [
+      for (final c in (since as ChangesSince).changes) '${c.runtimeType} ${c.key.values['screen']}',
+    ];
+
+    test('is a first visit, then every frame against the round opened before, which a reload '
+        'shows again', () async {
+      final api = twoRounds();
+      final model = CanvasModel(api, reviewer: ' Rae ', now: () => t);
+      await model.load();
+      expect(model.since, isA<FirstVisit>());
+      expect(model.changeOf(home), isNull);
+
+      api.roundsList.add(2);
+      await model.load();
+      expect((model.since as ChangesSince).n, 1);
+      expect(changes(model.since), [
+        'FrameSame home',
+        'FrameChanged coffees',
+        'FrameUncompared brew',
+        'FrameAdded me',
+        'FrameGone away',
+      ]);
+      expect(model.changeOf(coffees), isA<FrameChanged>());
+      expect(model.changeOf(me), isA<FrameAdded>());
+
+      await model.load();
+      expect(changes(model.since), hasLength(5), reason: 'a reload shows the same changes');
+      expect((model.since as ChangesSince).n, 1);
+      expect(api.opens, [(1, 'Rae'), (2, 'Rae'), (2, 'Rae')]);
+      expect(api.roundReads, [1, 2, 1, 2], reason: 'round 1 read once for the visit');
+    });
+
+    test('is not asked, nor recorded, until the reviewer is given, and is theirs alone', () async {
+      final api = twoRounds();
+      final model = CanvasModel(api, now: () => t);
+      await model.load();
+      expect(model.since, isA<SinceUnasked>());
+      model.reviewer = 'Ra';
+      model.reviewer = 'Rae';
+      expect(model.since, isA<SinceUnasked>());
+      expect(api.opens, isEmpty, reason: 'a keystroke records nothing');
+
+      await model.visit();
+      expect(model.since, isA<FirstVisit>());
+      expect(api.opens, [(1, 'Rae')]);
+      model.reviewer = 'Kit';
+      expect(model.since, isA<SinceUnasked>(), reason: "Rae's visit is not Kit's");
+      model.reviewer = '';
+      await model.visit();
+      expect(model.since, isA<SinceUnasked>());
+      expect(api.opens, [(1, 'Rae')]);
+    });
+
+    test('that is refused is said, with why, and never as nothing changed', () async {
+      final api = twoRounds()..roundsList.add(2);
+      final model = CanvasModel(api, reviewer: 'Rae', now: () => t);
+      api.refuseOpened = const Refused.environment('connection refused');
+      await model.load();
+      expect(model.state, isA<Shown>(), reason: 'the round is shown all the same');
+      expect(model.since, isA<SinceUnknown>().having((s) => s.why, 'why', 'connection refused'));
+      expect(model.changeOf(home), isNull);
+
+      api.refuseOpened = null;
+      api.visits['Rae'] = Visit(1);
+      api.refuseRound[1] = const Refused.environment('timed out');
+      await model.visit();
+      expect(
+        model.since,
+        isA<SinceUnknown>().having((s) => s.why, 'why', 'round 1 was not read: timed out'),
+      );
+      api.refuseRound.clear();
+      await model.visit();
+      expect(changes(model.since), hasLength(5), reason: 'the refused round is read again');
+    });
+
+    test("that answers after the name changed is not said as the new reviewer's", () async {
+      final api = twoRounds();
+      final model = CanvasModel(api, reviewer: 'Rae', now: () => t);
+      api.holdOpened = Completer();
+      final loading = model.load();
+      await pumpEventQueue();
+      expect(model.since, isA<SinceAsking>());
+      model.reviewer = 'Kit';
+      api.holdOpened!.complete();
+      await loading;
+      expect(model.since, isA<SinceUnasked>());
     });
   });
 

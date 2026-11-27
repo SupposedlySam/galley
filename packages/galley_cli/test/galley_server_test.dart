@@ -461,6 +461,22 @@ void main() {
     });
   });
 
+  test('a visit returns the round the reviewer opened before, and is refused without '
+      'one', () async {
+    Future<(int, Object?)> visit(Object body) => json('POST', '/api/visits', body: body);
+    var (code, body) = await visit({'round': 1, 'by': 'Rae'});
+    final first = body! as JsonMap;
+    expect((code, first.containsKey('before'), first['before']), (200, true, null));
+    writeRoundAt(g.roundPath(2));
+    (code, body) = await visit({'round': 2, 'by': 'Rae'});
+    expect((code, (body! as JsonMap)['before']), (200, 1));
+    expect((await visit({'round': 2})).$1, 400);
+    expect((await visit({'round': '2', 'by': 'Rae'})).$1, 400);
+    expect((await visit({'round': 2, 'by': ' '})).$1, 422);
+    expect((await visit({'round': 7, 'by': 'Rae'})).$1, 404);
+    expect((await json('GET', '/api/visits')).$1, 405);
+  });
+
   test('a wrong method is 405, a wrong path 404', () async {
     expect((await json('DELETE', '/api/marks')).$1, 405);
     expect((await json('GET', '/api/marks/m1/events')).$1, 405);

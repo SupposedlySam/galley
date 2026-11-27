@@ -47,7 +47,69 @@ final class CanvasModel extends ChangeNotifier {
     if (signedIn != null) {
       throw StateError('the reviewer is the member signed in, ${signedIn!.alias}');
     }
-    _reviewer = name.trim();
+    final next = name.trim();
+    // A visit is another reviewer's once the name changes, so what was said is not kept; the
+    // field asks again when the name is given (Enter), not on every keystroke of it.
+    if (next != _reviewer) _since = const SinceUnasked();
+    _reviewer = next;
+    notifyListeners();
+  }
+
+  /// What changed in the round shown since the reviewer last opened one (DESIGN D17).
+  Since get since => _since;
+  Since _since = const SinceUnasked();
+
+  /// How [frame] of the round shown compares with the round the reviewer opened before, or
+  /// null when that is not known yet ([since] says why).
+  FrameChange? changeOf(FrameKey frame) => switch (_since) {
+    ChangesSince(:final byFrame) => byFrame[frame],
+    _ => null,
+  };
+
+  /// Records that the reviewer opened the round shown, and reads what changed since the round
+  /// they opened before it. [load] does this when the reviewer is known; a typed name does it
+  /// when it is given.
+  ///
+  /// Recorded when the round is shown, not when the reviewer acts: opening it is what makes
+  /// its frames seen. Rejected: recording on the first mark or verify, which would show a
+  /// reviewer who only looked the same changes again on every visit.
+  Future<void> visit() async {
+    final shown = _state;
+    final by = _reviewer;
+    if (shown is! Shown) return;
+    if (by.isEmpty) {
+      _since = const SinceUnasked();
+      return notifyListeners();
+    }
+    _since = const SinceAsking();
+    notifyListeners();
+    Since since;
+    try {
+      since = switch (await api.opened(shown.n, by: by)) {
+        null => const FirstVisit(),
+        final m => await _inRound(
+          m,
+          (before) => ChangesSince(
+            m,
+            changesSince(before.frames, shown.round.frames, sinceN: m, shownN: shown.n),
+          ),
+          SinceUnknown.new,
+        ),
+      };
+    } on Refused catch (e) {
+      since = SinceUnknown(e.message);
+    } on FormatException catch (e) {
+      since = SinceUnknown('the galley sent what does not read: ${e.message}');
+    }
+    _said(by, shown, since);
+  }
+
+  // What was found is said only while it is still about who is reviewing and the round shown:
+  // a name changed or a reload while the galley was asked makes it someone else's answer.
+  void _said(String by, Shown asked, Since since) {
+    final now = _state;
+    if (by != _reviewer || now is! Shown || now.n != asked.n) return;
+    _since = since;
     notifyListeners();
   }
 
@@ -83,6 +145,9 @@ final class CanvasModel extends ChangeNotifier {
         final round = await api.round(n);
         _state = Shown(n, round, Board.of(round.frames), await api.marks());
       }
+      notifyListeners();
+      if (_reviewer.isNotEmpty) await visit();
+      return;
     } on Refused catch (e) {
       _state = Unavailable(e.message);
     } on FormatException catch (e) {
@@ -147,22 +212,36 @@ final class CanvasModel extends ChangeNotifier {
   Future<Before> before(PlacedMark m) async {
     final n = m.raisedIn;
     if (n == null) return const BeforeUnknown('the round it was raised on is not recorded');
-    try {
-      final round = switch (_state) {
-        Shown(n: final shown, :final round) when shown == n => round,
-        _ => await (_rounds[n] ??= api.round(n)),
-      };
+    return _inRound(n, (round) {
       final frame = round.round.frame(m.mark.frame);
       if (frame == null) return BeforeUnknown('round $n has no frame ${m.mark.frame}');
       return BeforeIn(n, frame.record);
+    }, BeforeUnknown.new);
+  }
+
+  /// What [read] makes of round [n], or what [unknown] makes of why it was not read. A round
+  /// not read is read again next time: a refusal may pass, and a file cut short may not be.
+  Future<T> _inRound<T>(
+    int n,
+    T Function(StoredRound round) read,
+    T Function(String why) unknown,
+  ) async {
+    try {
+      return read(await _roundAt(n));
     } on Refused catch (e) {
-      _rounds.remove(n)?.ignore(); // Read again next time: a refusal may pass.
-      return BeforeUnknown('round $n was not read: ${e.message}');
+      _rounds.remove(n)?.ignore();
+      return unknown('round $n was not read: ${e.message}');
     } on FormatException catch (e) {
-      _rounds.remove(n)?.ignore(); // Read again next time: it may have been cut short.
-      return BeforeUnknown('round $n does not read: ${e.message}');
+      _rounds.remove(n)?.ignore();
+      return unknown('round $n does not read: ${e.message}');
     }
   }
+
+  /// Round [n]: the one shown, or read once however many marks and visits ask for it.
+  Future<StoredRound> _roundAt(int n) async => switch (_state) {
+    Shown(n: final shown, :final round) when shown == n => round,
+    _ => await (_rounds[n] ??= api.round(n)),
+  };
 
   final _rounds = <int, Future<StoredRound>>{};
 
@@ -322,6 +401,54 @@ final class BeforeIn extends Before {
 final class BeforeUnknown extends Before {
   /// Unknown, because of [why].
   const BeforeUnknown(this.why);
+
+  /// Why.
+  final String why;
+}
+
+/// What changed since the reviewer's last visit, or why that is not said.
+sealed class Since {
+  const Since();
+}
+
+/// Not asked: the reviewer has not said who they are, or no round is shown.
+final class SinceUnasked extends Since {
+  /// Not asked.
+  const SinceUnasked();
+}
+
+/// Being asked.
+final class SinceAsking extends Since {
+  /// Asking.
+  const SinceAsking();
+}
+
+/// The reviewer had opened no round before: every frame is new to them.
+final class FirstVisit extends Since {
+  /// A first visit.
+  const FirstVisit();
+}
+
+/// Every frame of the round shown as it compares with round [n], the one the reviewer opened
+/// before it: [changes], in the order [changesSince] gives them.
+final class ChangesSince extends Since {
+  /// [changes] since round [n].
+  ChangesSince(this.n, this.changes) : byFrame = {for (final c in changes) c.key: c};
+
+  /// The round opened before.
+  final int n;
+
+  /// One per frame of either round.
+  final List<FrameChange> changes;
+
+  /// [changes] by frame.
+  final Map<FrameKey, FrameChange> byFrame;
+}
+
+/// Not said, because of [why]: never shown as "nothing changed".
+final class SinceUnknown extends Since {
+  /// Unknown, because of [why].
+  const SinceUnknown(this.why);
 
   /// Why.
   final String why;

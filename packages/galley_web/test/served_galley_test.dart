@@ -134,6 +134,26 @@ void main() {
     }, reason: 'the time is the server\'s, so none is sent');
   });
 
+  test('a visit posts the round and who, and reads the round opened before, or none', () async {
+    var before = <String, Object?>{'before': 2};
+    final asked = <http.Request>[];
+    final api = ServedGalley(
+      MockClient((request) async {
+        asked.add(request);
+        return http.Response(jsonEncode(before), 200);
+      }),
+      Uri.parse('http://localhost:7399/?by=Owner'),
+    );
+    expect(await api.opened(3, by: 'Rae'), 2);
+    before = {'before': null};
+    expect(await api.opened(3, by: 'Rae'), isNull);
+    before = {'before': 'two'};
+    await expectLater(api.opened(3, by: 'Rae'), throwsFormatException);
+    expect(asked.map((r) => '${r.method} ${r.url.path} ${r.body}'), [
+      for (var i = 0; i < 3; i++) 'POST /api/visits {"round":3,"by":"Rae"}',
+    ]);
+  });
+
   group('a reply that is not a success', () {
     test("is a refusal in the backend's words", () async {
       final (api, _) = serve({

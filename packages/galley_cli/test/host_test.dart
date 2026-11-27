@@ -401,6 +401,7 @@ void main() {
           'files',
           'marks',
           'events',
+          'visits',
         ]),
       );
       expect(
@@ -412,20 +413,32 @@ void main() {
           for (final f in (c['fields'] as List).cast<Map<String, Object?>>())
             if (f['type'] == 'relation') '${c['name']}.${f['name']}: ${f['cascadeDelete']}',
       ];
-      expect(relations, hasLength(greaterThanOrEqualTo(8)), reason: 'the population looked at');
+      expect(relations, hasLength(greaterThanOrEqualTo(9)), reason: 'the population looked at');
       expect(relations.where((r) => !r.endsWith(': false')), isEmpty);
     });
 
     // The hook's transaction is what keeps two events from taking one place in a history (an
-    // event, below: five verifies at once land once, and no write ever reaches this index).
-    // The index is the second guard, for a writer that is not the hook, so no write can show
-    // it is there, and it is read here instead.
-    test('holds a place in a history once: (mark, seq) is unique', () async {
-      final events = (await collections()).singleWhere((c) => c['name'] == 'events');
-      final indexes = (events['indexes'] as List).cast<String>();
+    // event, below: five verifies at once land once), and a member from keeping two visits (a
+    // visit, below: two tabs at once leave one row). No write ever reaches these indexes. Each
+    // is the second guard, for a writer that is not the hook, so no write can show it is
+    // there, and it is read here instead.
+    test('holds a place in a history once, and a member\'s visit once', () async {
+      final all = await collections();
+      String uniqueOn(String name) {
+        final indexes = (all.singleWhere((c) => c['name'] == name)['indexes'] as List)
+            .cast<String>()
+            .map((i) => i.replaceAll(RegExp(r'\s+'), ' ').replaceAll('`', ''));
+        return indexes
+            .map((i) => RegExp('^CREATE UNIQUE INDEX \\S+ ON $name \\((.+)\\)\$').firstMatch(i)?[1])
+            .nonNulls
+            .join(' | ');
+      }
+
       expect(
-        indexes.map((i) => i.replaceAll(RegExp(r'\s+'), ' ').replaceAll('`', '')),
-        contains(matches(RegExp(r'^CREATE UNIQUE INDEX \S+ ON events \(mark, seq\)$'))),
+        {
+          for (final n in ['events', 'visits']) n: uniqueOn(n),
+        },
+        {'events': 'mark, seq', 'visits': 'member'},
       );
     });
   });
@@ -680,6 +693,75 @@ void main() {
         );
       },
     );
+  });
+
+  group('a visit', () {
+    /// [who]'s membership of [galley].
+    Future<String> memberOf(As who, String galley) async =>
+        (await who.records(
+              'members',
+              filter: 'user = "${who.id}" && galley = "$galley"',
+            )).single['id']
+            as String;
+
+    test('is kept by its member, read by nobody else, and judged: a newer finished round, the '
+        'one before it kept', () async {
+      final galley = await owner.makeGalley('Visited');
+      await pushed(galley, 1);
+      await pushed(galley, 2);
+      await owner.create('rounds', round(galley, 3));
+      final rae = await reviewerOf(galley, 'visitor@example.com', 'Visitor');
+      final kit = await reviewerOf(galley, 'other-visitor@example.com', 'Other');
+      final member = await memberOf(rae, galley);
+
+      Future<Answer> first(As who, Map<String, Object?> visit) =>
+          who.create('visits', {'member': member, ...visit});
+      expect(messageOf(await first(rae, {'latest': 3})), contains('no finished round 3'));
+      expect(messageOf(await first(rae, {'latest': 1, 'before': 1})), isNotNull);
+      expect((await first(kit, {'latest': 1})).status, 400, reason: "as another's member");
+      expect((await first(await stranger('nosy@example.com'), {'latest': 1})).status, 400);
+      final made = await first(rae, {'latest': 1});
+      expect(made.status, 200, reason: '${made.body}');
+      final id = (made.body as Map)['id'] as String;
+      expect(messageOf(await first(rae, {'latest': 2})), contains('kept already'));
+
+      expect(await rae.ids('visits'), [id]);
+      expect(await kit.ids('visits'), isEmpty, reason: 'a fellow reviewer reads none');
+      expect(await owner.ids('visits'), isNot(contains(id)), reason: 'nor the owner');
+      expect((await owner.update('visits', id, {'latest': 2, 'before': 1})).status, 404);
+
+      final again = await rae.update('visits', id, {'latest': 1, 'before': 0});
+      expect(messageOf(again), contains('no newer than round 1'));
+      final wrong = await rae.update('visits', id, {'latest': 2, 'before': 0});
+      expect(messageOf(wrong), contains('is before 1, not none'));
+      final moved = await rae.update('visits', id, {
+        'member': await memberOf(kit, galley),
+        'latest': 2,
+        'before': 1,
+      });
+      expect(moved.status, isNot(200), reason: 'a visit stays its member\'s');
+      final next = await rae.update('visits', id, {'latest': 2, 'before': 1});
+      expect(next.status, 200, reason: '${next.body}');
+      expect(
+        (await rae.view('visits', id)).body,
+        allOf(containsPair('latest', 2), containsPair('before', 1), containsPair('member', member)),
+      );
+    });
+
+    test("is not a revoked reviewer's to read or write", () async {
+      final galley = await owner.makeGalley('Visit revoked');
+      await pushed(galley, 1);
+      await pushed(galley, 2);
+      final rae = await reviewerOf(galley, 'revoked-visitor@example.com', 'Revoked');
+      final member = await memberOf(rae, galley);
+      final id =
+          ((await rae.create('visits', {'member': member, 'latest': 1})).body as Map)['id']
+              as String;
+      expect(await rae.ids('visits'), [id], reason: 'the control');
+      expect((await owner.update('members', member, {'revoked': true})).status, 200);
+      expect(await rae.ids('visits'), isEmpty);
+      expect((await rae.update('visits', id, {'latest': 2, 'before': 1})).status, 404);
+    });
   });
 
   group('a galley', () {

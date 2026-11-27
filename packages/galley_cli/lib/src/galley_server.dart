@@ -19,6 +19,8 @@ import 'local_galley.dart';
 ///                                   "at": [x, y], "note", "by"}
 ///                                   -> 201 {"mark", "status", "node", "round"}
 /// POST /api/marks/<id>/events       a MarkEvent's JSON without "at" -> 200 {"mark", "status"}
+/// POST /api/visits                  {"round": n, "by"} -> 200 {"before": m | null}, the round
+///                                   `by` opened before n (D17)
 /// GET  /<path>                      the canvas's files, when there is one (DESIGN D14)
 /// ```
 ///
@@ -161,13 +163,17 @@ final class GalleyServer {
           (at) => MarkEvent.fromJson(_stamped(event, at), 'request'),
         );
         _json(request.response, 200, {'mark': mark.toJson(), 'status': mark.status.name});
+      case ['visits'] when post:
+        final body = JsonReader(await _object(request), 'request');
+        final before = await _local.opened(body.integer('round'), by: body.string('by'));
+        _json(request.response, 200, {'before': before});
       case ['rounds', final n, ...final file] when get:
         final round = int.tryParse(n);
         if (round == null || !_local.directory.rounds().contains(round)) {
           throw _Status(404, 'no finished round $n');
         }
         await _file(request.response, _local.directory.roundPath(round), file);
-      case ['galley'] || ['marks'] || ['marks', _, 'events'] || ['rounds', ...]:
+      case ['galley'] || ['marks'] || ['marks', _, 'events'] || ['visits'] || ['rounds', ...]:
         throw _Status(405, '${request.method} is not allowed here');
       default:
         throw _Status(404, 'no ${request.uri.path}');

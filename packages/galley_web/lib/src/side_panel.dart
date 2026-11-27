@@ -1,6 +1,7 @@
 import 'package:galley_core/galley_core.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'board.dart';
 import 'canvas_model.dart';
 import 'compare.dart';
 import 'marks.dart';
@@ -102,6 +103,9 @@ class _ReviewerFieldState extends State<_ReviewerField> {
   @override
   Widget build(BuildContext context) => TextField(
     controller: _name,
+    // The name is given on Enter: that is when the visit is recorded, so a name half typed is
+    // not recorded as a reviewer who opened the round.
+    onSubmitted: (_) => widget.model.visit(),
     decoration: const InputDecoration(
       labelText: 'Reviewing as',
       hintText: 'Your name, on every mark you raise',
@@ -133,12 +137,6 @@ class MarkList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final damaged = shown.damaged;
-    if (shown.marks.isEmpty && damaged.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16),
-        child: Text('No marks yet. Click a widget in a frame to raise one.'),
-      );
-    }
     final marks = [...shown.marks]..sort((a, b) => b.mark.at.compareTo(a.mark.at));
     final queue = model.queue;
     final text = Theme.of(context).textTheme;
@@ -181,7 +179,14 @@ class MarkList extends StatelessWidget {
             ),
           const Divider(height: 16),
         ],
+        SinceSection(model: model, onShow: onShow),
+        const Divider(height: 16),
         if (queue.isNotEmpty || damaged.isNotEmpty) heading('Every mark'),
+        if (shown.marks.isEmpty && damaged.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('No marks yet. Click a widget in a frame to raise one.'),
+          ),
         for (final m in marks)
           ListTile(
             key: ValueKey(m.mark.id),
@@ -216,6 +221,100 @@ String _answered(Answer answer) => switch (answer.kind) {
   AnswerKind.wontFix => "won't fix",
   AnswerKind.question => 'a question',
 };
+
+/// What changed in the round shown since the reviewer last opened one: the frames new,
+/// changed, gone and not compared, each a tap from the board, and how many are the same.
+///
+/// The same frames are counted, not listed: they are what the reviewer need not look at again,
+/// and the count says how many were looked at. A frame not compared is listed with why, never
+/// counted as the same (DESIGN: an unknown is never nothing).
+class SinceSection extends StatelessWidget {
+  /// The section of [model]'s visit.
+  const SinceSection({super.key, required this.model, required this.onShow});
+
+  /// Whose visit.
+  final CanvasModel model;
+
+  /// Moves the board to a frame.
+  final void Function(FrameKey frame) onShow;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    Widget line(String s) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Text(s, style: text.bodySmall),
+    );
+    Widget heading(String s) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Text(s, style: text.titleSmall),
+    );
+    return Column(
+      key: const ValueKey('since'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: switch (model.since) {
+        SinceUnasked() => [
+          heading('Since your last visit'),
+          line(
+            model.signedIn == null
+                ? 'Say who you are above, and press Enter, to see what changed since you last '
+                      'looked.'
+                : 'Not asked yet.',
+          ),
+        ],
+        SinceAsking() => [heading('Since your last visit'), line('Asking the galley…')],
+        FirstVisit() => [
+          heading('Since your last visit'),
+          line('Your first visit: every frame is new to you.'),
+        ],
+        SinceUnknown(:final why) => [
+          heading('Since your last visit'),
+          line('Not known: $why. No frame is shown as changed or the same.'),
+        ],
+        ChangesSince(:final n, :final changes) => [
+          heading('Since your last visit, round $n'),
+          line(sinceCounts(changes)),
+          for (final c in changes)
+            if (c is! FrameSame)
+              ListTile(
+                key: ValueKey('since ${c.key}'),
+                dense: true,
+                leading: Icon(_icon(c), size: 18),
+                title: Text(Board.nameOf(c.key)),
+                subtitle: Text(switch (c) {
+                  FrameAdded() => 'new',
+                  FrameChanged() => 'changed',
+                  FrameGone() => 'gone: not in this round',
+                  FrameUncompared(:final why) => 'not compared: $why',
+                  FrameSame() => 'the same',
+                }),
+                onTap: c is FrameGone ? null : () => onShow(c.key),
+              ),
+        ],
+      },
+    );
+  }
+
+  static IconData _icon(FrameChange c) => switch (c) {
+    FrameAdded() => Icons.fiber_new_outlined,
+    FrameChanged() => Icons.change_circle_outlined,
+    FrameGone() => Icons.remove_circle_outline,
+    FrameUncompared() => Icons.help_outline,
+    FrameSame() => Icons.check,
+  };
+}
+
+/// How many of [changes] are of each kind, every kind said, so a zero is read as looked at.
+String sinceCounts(List<FrameChange> changes) {
+  int count<T extends FrameChange>() => changes.whereType<T>().length;
+  return [
+    '${count<FrameChanged>()} changed',
+    '${count<FrameAdded>()} new',
+    '${count<FrameGone>()} gone',
+    '${count<FrameUncompared>()} not compared',
+    '${count<FrameSame>()} the same',
+  ].join(' · ');
+}
 
 /// One mark's thread: what was said, by whom and when, and what the reviewer can do next.
 class Thread extends StatefulWidget {

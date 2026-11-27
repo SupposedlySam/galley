@@ -43,6 +43,26 @@ RenderOutcome _outcome(FramePixels pixels, FrameTree tree) => RenderOutcome(
 );
 
 void main() {
+  group('digest', () {
+    // Computed apart from the code under test: Python's hashlib over the size, big-endian, and
+    // the RGBA bytes.
+    test('is the SHA-256 of the width, the height and the RGBA bytes', () {
+      expect(_pixels().digest, 'ff6ef4cfe219a8273e96da4c1f712dbae8845fee5ea60a02f81d868da9579ad8');
+      final other = FramePixels(width: 8, height: 2, png: Uint8List(0), rgba: _pixels().rgba);
+      expect(
+        other.digest,
+        'cc0614d3fdd5771b88c9ac6391a672869afca95225022821daf2d5a9b07c9615',
+        reason: 'the same bytes at another size are another image',
+      );
+    });
+
+    test('changes with one pixel, and not with the PNG', () {
+      expect(_pixels(lit: [(1, 2)]).digest, isNot(_pixels().digest));
+      final png = FramePixels(width: 4, height: 4, png: Uint8List(9), rgba: _pixels().rgba);
+      expect(png.digest, _pixels().digest);
+    });
+  });
+
   test('identical renders do not mismatch', () {
     expect(mismatchOf(_outcome(_pixels(), _tree()), _outcome(_pixels(), _tree()), 1), isNull);
   });

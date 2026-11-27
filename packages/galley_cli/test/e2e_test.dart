@@ -61,5 +61,17 @@ void main() {
       '${g.roundPath(2)}/${(await g.readRound(2)).round.frame(key)!.record.image}',
     );
     expect(image.lengthSync(), greaterThan(100), reason: 'a real png: ${image.path}');
+
+    // Nothing changed in the app between the two packs, in separate processes: every frame
+    // reads the same (D17). A digest that moved without a change would list every frame as
+    // changed on every visit.
+    final changes = changesSince(
+      (await g.readRound(1)).frames,
+      (await g.readRound(2)).frames,
+      sinceN: 1,
+      shownN: 2,
+    );
+    expect(changes, hasLength(6), reason: 'the population looked at');
+    expect(changes, everyElement(isA<FrameSame>()));
   }, timeout: const Timeout(Duration(minutes: 10)));
 }

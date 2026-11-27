@@ -124,6 +124,15 @@ final class Board {
     null => '(no screen)',
   };
 
+  /// [key] as a reviewer reads it, off the board: its state, as a column is headed, then the
+  /// value of every other axis, by the axis's name. Rejected: the key's own order, which sorts
+  /// the axes by name and so put the device before the screen.
+  static String nameOf(FrameKey key) => [
+    _stateOf(key),
+    for (final MapEntry(:key, :value) in key.values.entries)
+      if (!_stateAxes.contains(key)) value,
+  ].join(' · ');
+
   static String _stateOf(FrameKey key) =>
       [?key.values['screen'], ?key.values['scenario']].join(' · ');
 

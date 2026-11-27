@@ -372,6 +372,89 @@ void main() {
     });
   });
 
+  group('since your last visit', () {
+    String digest(String c) => c * 64;
+    final coffees = _keys[1];
+    final away = keyOf('away', pixel7);
+
+    /// Round 1 has home, coffees and away; round 2 has every [_keys] frame, coffees changed.
+    FakeGalley visited() => FakeGalley(
+      roundsList: [1, 2],
+      byRound: {
+        1: roundFiles(
+          [_home, coffees, away],
+          pixels: {_home: digest('a'), coffees: digest('b'), away: digest('c')},
+        ),
+        2: roundFiles(_keys, pixels: {for (final k in _keys) k: digest(k == coffees ? 'e' : 'a')}),
+      },
+    )..visits['Tester'] = Visit(1);
+
+    testWidgets('lists the frames to look at again, counts the rest, and says so on the board', (
+      tester,
+    ) async {
+      final api = visited();
+      await pumpCanvas(tester, api, reviewer: 'Tester');
+      await tester.pump();
+      expect(api.opens, [(2, 'Tester')]);
+      expect(find.text('Since your last visit, round 1'), findsOneWidget);
+      expect(find.text('1 changed · 2 new · 1 gone · 0 not compared · 1 the same'), findsOneWidget);
+      final listed = [
+        for (final t in tester.widgetList<ListTile>(
+          find.descendant(of: find.byKey(const ValueKey('since')), matching: find.byType(ListTile)),
+        ))
+          ((t.title! as Text).data, (t.subtitle! as Text).data, t.onTap != null),
+      ];
+      expect(listed, [
+        ('coffees · base · pixel-7', 'changed', true),
+        ('brew · base · pixel-7', 'new', true),
+        ('me · base · pixel-7', 'new', true),
+        ('away · base · pixel-7', 'gone: not in this round', false),
+      ]);
+      expect(onTiles(find.text('changed')), findsOneWidget);
+      expect(onTiles(find.text('new')), findsNWidgets(2));
+      expect(find.byKey(ValueKey('since $_home')), findsNothing, reason: 'the same says nothing');
+
+      await tester.tap(find.text('coffees · base · pixel-7'));
+      await tester.pump();
+      expect(boardOf(tester).scale, closeTo(1, 0.01), reason: 'shown at full size');
+    });
+
+    testWidgets('a first visit says so, and a typed name is recorded on Enter, not as typed', (
+      tester,
+    ) async {
+      final api = visited()..visits.clear();
+      await pumpCanvas(tester, api, reviewer: '');
+      expect(find.textContaining('press Enter'), findsOneWidget);
+      await tester.enterText(find.widgetWithText(TextField, 'Reviewing as'), 'Tes');
+      await tester.enterText(find.widgetWithText(TextField, 'Reviewing as'), 'Tester');
+      await tester.pump();
+      expect(api.opens, isEmpty, reason: 'no visit for a name half typed');
+
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      expect(api.opens, [(2, 'Tester')]);
+      expect(find.text('Your first visit: every frame is new to you.'), findsOneWidget);
+      expect(
+        onTiles(find.text('new')),
+        findsNothing,
+        reason: 'no frame is badged on a first visit',
+      );
+    });
+
+    testWidgets('that is not known says why, and shows no frame as changed or the same', (
+      tester,
+    ) async {
+      final api = visited()..refuseOpened = const Refused.environment('connection refused');
+      await pumpCanvas(tester, api, reviewer: 'Tester');
+      await tester.pump();
+      expect(
+        find.text('Not known: connection refused. No frame is shown as changed or the same.'),
+        findsOneWidget,
+      );
+      expect(onTiles(find.text('changed')), findsNothing);
+    });
+  });
+
   group('a mark that does not read', () {
     const why = 'u7, who wrote to mark m9, is not a member';
 

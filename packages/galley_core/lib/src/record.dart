@@ -136,7 +136,8 @@ final class Finding {
 /// files of their own named here.
 final class FrameRecord {
   /// A record. An [FrameStatus.error] record must carry at least one error, and the other
-  /// statuses carry none. That way the status and the errors can never disagree.
+  /// statuses carry none. That way the status and the errors can never disagree. A digest of
+  /// [pixels] needs an [image]: the digest of an image not kept is of nothing a reviewer sees.
   FrameRecord({
     required this.key,
     required this.scenario,
@@ -148,6 +149,7 @@ final class FrameRecord {
     List<String> errors = const [],
     List<Finding> findings = const [],
     this.image,
+    this.pixels,
     this.tree,
   }) : errors = List.unmodifiable(errors),
        findings = List.unmodifiable(findings) {
@@ -156,6 +158,13 @@ final class FrameRecord {
         'frame $key: status ${status.name} with ${errors.length} error(s); an error record '
         'needs an error, and only an error record may have one',
       );
+    }
+    final digest = pixels;
+    if (digest != null && image == null) {
+      throw ArgumentError('frame $key: a digest of pixels with no image');
+    }
+    if (digest != null && !_sha256.hasMatch(digest)) {
+      throw ArgumentError.value(digest, 'pixels', 'is not a SHA-256 in lower-case hex');
     }
   }
 
@@ -182,6 +191,7 @@ final class FrameRecord {
         ],
         findings: r.readList('findings', Finding.fromJson),
         image: r.optionalString('image'),
+        pixels: r.optionalString('pixels'),
         tree: r.optionalString('tree'),
       );
     } on ArgumentError catch (e) {
@@ -222,6 +232,17 @@ final class FrameRecord {
   /// The tree JSON, relative to the round directory. Null when nothing could be recorded.
   final String? tree;
 
+  /// The SHA-256, in lower-case hex, of the pixels [image] holds: of their width and height,
+  /// then their RGBA bytes (`FramePixels.digest` in galley, which writes it). Null when nothing
+  /// was captured, and in a round packed before 0.3.10, which did not record it.
+  ///
+  /// What says whether the frame changed between two rounds ([FrameChange]). Of the pixels,
+  /// not of the PNG: an encoder may write the same pixels as other bytes, and every frame of a
+  /// round packed by a newer Flutter would then read as changed. Rejected: the SHA-256 that a
+  /// server's manifest keeps of each file, which is of the PNG, and which a galley on this
+  /// machine (D12) does not have.
+  final String? pixels;
+
   /// The JSON form [FrameRecord.fromJson] reads.
   JsonMap toJson() => {
     'key': key.toString(),
@@ -234,6 +255,9 @@ final class FrameRecord {
     'errors': errors,
     'findings': [for (final f in findings) f.toJson()],
     if (image != null) 'image': image,
+    if (pixels != null) 'pixels': pixels,
     if (tree != null) 'tree': tree,
   };
+
+  static final _sha256 = RegExp(r'^[0-9a-f]{64}$');
 }

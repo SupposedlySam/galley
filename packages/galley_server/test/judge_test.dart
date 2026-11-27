@@ -434,6 +434,45 @@ void main() {
     });
   });
 
+  group('a visit', () {
+    String? visit(JsonMap visit, {JsonMap? kept, List<int> finished = const [1, 2, 3]}) =>
+        said({'write': 'visit', 'visit': visit, 'kept': kept, 'finished': finished});
+
+    test('is a first visit, or the round opened after the one kept, to a finished round', () {
+      expect(
+        [
+          visit({'latest': 1}),
+          visit({'latest': 3, 'before': 1}, kept: {'latest': 1}),
+          visit({'latest': 3, 'before': 2}, kept: {'latest': 2, 'before': 1}),
+        ],
+        [null, null, null],
+      );
+    });
+
+    test('is refused, saying why, out of order, to a round not finished, or not newer', () {
+      expect(
+        [
+          visit({'latest': 4}),
+          visit({'latest': 2, 'before': 1}),
+          visit({'latest': 3}, kept: {'latest': 2}),
+          visit({'latest': 3, 'before': 1}, kept: {'latest': 2, 'before': 1}),
+          visit({'latest': 2, 'before': 1}, kept: {'latest': 2, 'before': 1}),
+          visit({'latest': 2}, kept: {'latest': 3, 'before': 1}),
+          visit({'latest': 3, 'before': 3}),
+        ],
+        [
+          'the galley has no finished round 4',
+          'a visit to round 2 after none is before none, not 1',
+          'a visit to round 3 after round 2 is before 2, not none',
+          'a visit to round 3 after round 2 is before 2, not 1',
+          'round 2 is no newer than round 2, opened already',
+          'round 2 is no newer than round 3, opened already',
+          startsWith('request.visit: '),
+        ],
+      );
+    });
+  });
+
   test('a request it does not read is refused, never passed', () {
     expect(
       [

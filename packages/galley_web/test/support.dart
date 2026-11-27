@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:galley_core/galley_core.dart';
 
 // Builders for the canvas tests: frames on named devices, rounds held in memory, and a backend
@@ -26,8 +28,14 @@ FrameKey keyOf(
   Map<String, String> more = const {},
 }) => FrameKey({'screen': screen, 'scenario': scenario, 'device': on.id, ...more});
 
-/// A rendered frame's record, with a tree and an image when named.
-FrameRecord recordOf(FrameKey key, DeviceProfile on, {String? tree, String? image}) => FrameRecord(
+/// A rendered frame's record, with a tree, an image and its [pixels] digest when named.
+FrameRecord recordOf(
+  FrameKey key,
+  DeviceProfile on, {
+  String? tree,
+  String? image,
+  String? pixels,
+}) => FrameRecord(
   key: key,
   scenario: key.values['scenario']!,
   uri: Uri.parse('/${key.values['screen']}'),
@@ -37,6 +45,7 @@ FrameRecord recordOf(FrameKey key, DeviceProfile on, {String? tree, String? imag
   essential: true,
   tree: tree,
   image: image,
+  pixels: pixels,
 );
 
 /// A frame of [screen] on [on], with no tree.
@@ -76,8 +85,12 @@ final class MemoryRoundFiles implements RoundFiles {
 }
 
 /// The files of a round of [keys], each on [pixel7] with [treeWithButton], and an image
-/// `frames/<i>.png` of each with [images].
-Map<String, Object?> roundFiles(List<FrameKey> keys, {bool images = false}) {
+/// `frames/<i>.png` of each with [images], or of each frame [pixels] gives a digest of.
+Map<String, Object?> roundFiles(
+  List<FrameKey> keys, {
+  bool images = false,
+  Map<FrameKey, String> pixels = const {},
+}) {
   final records = [for (final (i, _) in keys.indexed) 'records/$i.json'];
   return {
     'index.json': RoundManifest(frames: records, planned: keys.length).toJson(),
@@ -86,7 +99,8 @@ Map<String, Object?> roundFiles(List<FrameKey> keys, {bool images = false}) {
         k,
         pixel7,
         tree: 'trees/$i.json',
-        image: images ? 'frames/$i.png' : null,
+        image: images || pixels.containsKey(k) ? 'frames/$i.png' : null,
+        pixels: pixels[k],
       ).toJson(),
       'trees/$i.json': treeWithButton(pixel7).toJson(),
     },
@@ -131,6 +145,18 @@ final class FakeGalley implements Galley {
 
   /// The events recorded, as sent: without a time, which the galley gives.
   final recorded = <(String, JsonMap)>[];
+
+  /// Each reviewer's visit, by name, kept as the core keeps it ([visitTo]).
+  final visits = <String, Visit>{};
+
+  /// The rounds opened, in order, with who opened them.
+  final opens = <(int, String)>[];
+
+  /// When set, every [opened] is refused with it.
+  Refused? refuseOpened;
+
+  /// When set, every [opened] waits for it.
+  Completer<void>? holdOpened;
 
   /// How many marks were raised.
   int raised = 0;
@@ -207,6 +233,15 @@ final class FakeGalley implements Galley {
     } on StateError catch (x) {
       throw Refused.conflict(x.message);
     }
+  }
+
+  @override
+  Future<int?> opened(int n, {required String by}) async {
+    _check();
+    opens.add((n, by));
+    await holdOpened?.future;
+    if (refuseOpened case final r?) throw r;
+    return (visits[by] = visitTo(n, visits[by])).before;
   }
 
   /// Puts [mark] in, placed in [round], raised on [raisedOn] (on [round] when not given). A

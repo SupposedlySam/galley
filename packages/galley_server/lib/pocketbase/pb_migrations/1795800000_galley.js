@@ -228,6 +228,28 @@ migrate((app) => {
     ["CREATE UNIQUE INDEX idx_events_mark_seq ON events (mark, seq)"],
   );
 
+  collection(
+    "visits",
+    [
+      relation("member", "members"),
+      // The rounds the member opened last and before it (galley_core's Visit, D17), judged by
+      // galley_validate ("visit"). An unset `before` is 0: a first visit, with none before it.
+      { name: "latest", type: "number", required: true, onlyInt: true, min: 1 },
+      { name: "before", type: "number", onlyInt: true, min: 1 },
+    ],
+    {
+      // A member's own, and nobody else's: which rounds a reviewer looked at is not the
+      // galley's to read. Rejected: a field of the membership, which the owner updates (a
+      // revoke) and the member may not.
+      listRule: "member.user = @request.auth.id && member.revoked = false",
+      viewRule: "member.user = @request.auth.id && member.revoked = false",
+      createRule: "member.user = @request.auth.id && member.revoked = false",
+      updateRule:
+        `member.user = @request.auth.id && member.revoked = false && ${unchanged("member")}`,
+    },
+    ["CREATE UNIQUE INDEX idx_visits_member ON visits (member)"],
+  );
+
   for (const [name, rulesOf] of Object.entries(rules)) {
     const c = app.findCollectionByNameOrId(name);
     unmarshal(

@@ -139,7 +139,9 @@ commands (DESIGN D13). It listens on loopback only. At `/` is the canvas: open
 `http://localhost:7340/?by=<your name>`, click a widget on a frame to mark it, and answer,
 verify or reopen in its thread. Above the marks, the answers waiting on you are listed, the
 oldest first. Each one's thread shows the widget as you marked it beside the same widget now,
-and "Looks right" or "Not yet" moves on to the next (DESIGN D16). The canvas is a build attached to the release, fetched once
+and "Looks right" or "Not yet" moves on to the next (DESIGN D16). Above those, the frames new
+or changed since the round you opened before are listed and marked on the board (DESIGN D17);
+`serve` keeps each reviewer's last visit in `.galley/visits.json`. The canvas is a build attached to the release, fetched once
 into a cache outside the app (`GALLEY_CACHE`, else the user cache directory) and checked
 against the hash this release pins before it is unpacked (DESIGN D14). With no network on the
 first start, `serve` says there is no canvas and serves the API. `--web <dir>` serves another

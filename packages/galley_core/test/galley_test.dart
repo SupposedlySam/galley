@@ -48,6 +48,9 @@ final class MemoryGalley implements Galley {
   @override
   Future<Mark> record(String id, MarkEvent Function(DateTime at) event) =>
       throw UnimplementedError();
+
+  @override
+  Future<int?> opened(int n, {required String by}) => throw UnimplementedError();
 }
 
 final class _Files implements RoundFiles {

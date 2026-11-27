@@ -11,6 +11,7 @@ import 'package:galley_core/galley_core.dart';
 ///   rounds/<n>/                  a round as the packer wrote it: round.json, index.json,
 ///                                records/, frames/, trees/
 ///   rounds/<n>/placements.json   where every mark is in that round
+///   visits.json                  each reviewer's last two rounds opened, by name (D17)
 /// ```
 ///
 /// A mark is one file so that two people answering two marks never write the same file.
@@ -182,6 +183,31 @@ final class GalleyDirectory {
     }
     return PlacedMark(null, Carried.raised(m), raisedIn: raisedIn);
   }
+
+  // ---- visits ----
+
+  String get _visitsFile => '$path/visits.json';
+
+  /// Each reviewer's [Visit], by the name they review as; empty before the first.
+  ///
+  /// One file, not one per reviewer: a name is what the reviewer typed, and is not a file
+  /// name. Only `galley serve` writes it, one request at a time, so no two writers race.
+  Map<String, Visit> visits() {
+    final f = File(_visitsFile);
+    if (!f.existsSync()) return const {};
+    return _read(f, (json, context) {
+      if (json is! JsonMap) throw FormatException('$context: expected an object');
+      return {
+        for (final MapEntry(:key, :value) in json.entries)
+          key: Visit.fromJson(value, '$context.$key'),
+      };
+    });
+  }
+
+  /// Writes every reviewer's visit.
+  void saveVisits(Map<String, Visit> visits) => _write(_visitsFile, {
+    for (final MapEntry(:key, :value) in visits.entries) key: value.toJson(),
+  });
 
   /// Writes [json] to [path] whole or not at all: a reader never sees half a file.
   static void _write(String path, JsonMap json) {

@@ -419,6 +419,7 @@ Until the server (D7), a galley is a directory, `.galley/` in the app's root by 
   marks/<id>.json              one mark each, its history only ever appended to
   rounds/<n>/                  a round as the packer wrote it
   rounds/<n>/placements.json   where every mark is in that round
+  visits.json                  each reviewer's last two rounds opened, by name (D17)
 ```
 
 `galley pack` renders round n+1 by running the app's galley test with `GALLEY_OUT` set
@@ -482,6 +483,7 @@ GET  /api/rounds/<n>/<path>     a file of a finished round
 POST /api/marks                 frame (key | axes), node and/or  -> 201 mark, status, node, round
                                 at, note, by
 POST /api/marks/<id>/events     a MarkEvent's JSON, without at   -> 200 mark, status
+POST /api/visits                round, by                        -> 200 before (D17)
 GET  /<path>                    the built canvas, from --web
 ```
 
@@ -583,6 +585,7 @@ Each one names the failure it prevents.
 | `files` | round, path, the file | the owner, before the round is finished, at a path its manifest lists | updated or deleted; two at one path |
 | `marks` | round, frame key, anchor, pin, note, author | any member, as themselves | updated or deleted; raised on a round a newer one replaced, or on a frame it does not have |
 | `events` | mark, seq, kind, note, commit, answer kind, author | any member, as themselves; an answer only the owner | updated or deleted; one the mark's history does not allow; two with one seq |
+| `visits` | member, the round opened last, the one before it (D17) | the member, as themselves | read by anyone else, the owner included; moved to another member; two for one member; a round not finished, or not newer |
 
 Every rule also requires that the writer's membership is not revoked, and takes the galley
 from the row written to (the mark's, the round's), never from a field of the request. A mark
@@ -817,6 +820,46 @@ the same widget now (`compare.dart`).
 - *Mutation, 2026-11-27:* 16 mutants of the queue, the next mark, the read of a round and the
   crop. One survived (the queue of a reviewer with no name) until a test reached it with a mark
   naming nobody; all are killed.
-- **Not built:** "frames new or changed since your last visit". It needs a digest of each frame
-  (the server's manifest has one per file) and the time of each reviewer's last visit, stored
-  per member. Not checked yet: the crops in a real browser.
+- **Built since, in D17:** the frames new or changed since your last visit. Not checked yet:
+  the crops in a real browser.
+
+## D17 · What changed since your last visit (2026-11-27)
+
+A reviewer who comes back to a galley of two hundred frames needs to know which to look at
+again. The canvas says, in the panel and on each frame of the board, which frames of the round
+shown are new, changed, gone or not compared since the round they opened before, and counts the
+ones that are the same (`changesSince`, `CanvasModel.since`).
+
+- **Changed means the pixels differ.** Each frame's record keeps `pixels`, a SHA-256 of its
+  width, height and RGBA bytes (`FramePixels.digest`), taken from the render the packer checked
+  twice (D4), so pixels that differ between rounds are the app's change and not a clock.
+  Rejected: comparing the trees, since a colour or an image changes no box; and the digest of
+  the PNG file, which an encoder may write differently for the same pixels.
+- **A frame not compared is said, never counted the same.** A round packed before 0.3.10 has no
+  digests, and a frame with no image has nothing to digest; both are listed with why.
+- **A visit is kept as two rounds: the one opened last, and the one before it** (galley_core's
+  `Visit`, `visitTo`). Opening a newer round moves the last into "before"; a reload of the same
+  round, or an older one, changes nothing, so a reload shows the same changes again. Rejected:
+  keeping only the last round, where a reload would show nothing changed; and the time of the
+  last visit, which needs the reviewer's clock and the galley's to agree.
+- **It is recorded when the round is shown, as the reviewer.** On a server, `by` must be the
+  member's alias, and only the member reads their own visit: which rounds a reviewer opened is
+  not the galley's to read. Rejected: recording it on a reviewer's first mark or verify, which
+  would show someone who only looked the same changes on every visit. On `galley serve`, a
+  typed name is recorded when it is given (Enter), so a name half typed is no reviewer's.
+- **The server judges a visit in the core**, as every other write (D15): the hook hands
+  `galley_validate` the visit, the one kept (re-read inside the transaction) and the finished
+  rounds, and it must equal `visitTo(latest, kept)`. Two tabs of one member at once: the second
+  write is refused against the first's visit, and `ServerGalley.opened` reads it again and
+  finds the visit kept. A second row for a member is refused by the hook and by a unique index.
+- **An unset `before` is 0 on the server.** PocketBase stores an unset number as 0, and round
+  numbers start at 1, so the hook and `ServerGalley` read 0 as none.
+- *Mutation, 2026-11-27:* 28 mutants: 16 of the visit rules (the hook, the judge, the
+  collection's rules and index), the client's alias check, retry and reading of 0, and the
+  local store; 12 of the canvas (when a visit is asked, whose answer it is, what is listed and
+  badged). One survived until a test reached it: the unique index, which no write reaches
+  behind the hook, so it is read, as the events index is (galley_cli's `host_test.dart`). All
+  are killed.
+- **Not built:** a reviewer choosing which round to compare with; changes in a round that is
+  not the newest; marking a frame as looked at. Not checked yet: the section in a real
+  browser.

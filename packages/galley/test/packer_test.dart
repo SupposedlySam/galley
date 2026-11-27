@@ -72,6 +72,19 @@ void main() {
     }
   });
 
+  test('every frame with an image has a digest of its pixels, and frames that look different '
+      'have different ones', () {
+    final records = [for (final p in _listed(out)) record(p)];
+    final withImage = records.where((r) => r.image != null).toList();
+    expect(withImage, hasLength(6), reason: 'the population looked at');
+    expect(withImage.map((r) => r.pixels), everyElement(matches(RegExp(r'^[0-9a-f]{64}$'))));
+    expect(
+      withImage.map((r) => r.pixels).toSet(),
+      hasLength(6),
+      reason: 'three screens on two devices: no two frames have the same pixels',
+    );
+  });
+
   test('an image frame names its placeholder', () {
     final r = record(_listed(out).firstWhere((p) => p.contains('screen=img')));
     expect(r.status, FrameStatus.rendered, reason: '${r.errors}');

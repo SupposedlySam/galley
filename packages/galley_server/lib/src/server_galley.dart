@@ -179,6 +179,55 @@ final class ServerGalley implements Galley {
     return _markOf(row, events, _aliasesOf(await _members()));
   }
 
+  /// [by] must be the member's alias, as for [raise]. The visit is kept in the member's own
+  /// `visits` row, which only they read, and the server judges it with [visitTo] (D17).
+  ///
+  /// A write refused because the row changed since it was read (the same member, in another
+  /// tab) is read and sent again, once: the server judged it against the other tab's visit.
+  @override
+  Future<int?> opened(int n, {required String by}) async {
+    final mine = _mine(await _members());
+    if (by != mine.alias) {
+      throw Refused.invalid(
+        '${session.email} opens rounds in this galley as ${mine.alias}, not $by',
+      );
+    }
+    await _round(n);
+    return _visit(n, mine, again: true);
+  }
+
+  Future<int?> _visit(int n, Member mine, {required bool again}) async {
+    final rows = await server.list('visits', filter: 'member = ${_quoted(mine.id)}', token: _token);
+    final row = rows.firstOrNull;
+    final kept = row == null ? null : _visitOf(row);
+    final next = visitTo(n, kept);
+    if (next == kept) return next.before;
+    try {
+      await server.send(
+        row == null ? 'POST' : 'PATCH',
+        server.api(['collections', 'visits', 'records', if (row != null) '${row['id']}']),
+        token: _token,
+        body: {if (row == null) 'member': mine.id, ...next.toJson()},
+      );
+    } on Refused catch (e) {
+      if (!again || e.kind != RefusalKind.invalid) rethrow;
+      return _visit(n, mine, again: false);
+    }
+    return next.before;
+  }
+
+  /// A visits row as the core's [Visit]: PocketBase stores an unset `before` as 0.
+  static Visit _visitOf(JsonMap row) {
+    try {
+      return Visit.fromJson({
+        'latest': row['latest'],
+        if (row['before'] case final before? when before != 0) 'before': before,
+      }, 'visit ${row['id']}');
+    } on FormatException catch (e) {
+      throw Refused.damaged('the server\'s ${e.message}');
+    }
+  }
+
   // --- Reading -------------------------------------------------------------------------------
 
   Future<List<_RoundRecord>> _finishedRounds() async {

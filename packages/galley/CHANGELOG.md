@@ -6,7 +6,9 @@ patch (DESIGN D8).
 
 ## 0.3.10 (unreleased)
 
-- No changes. Released with `galley_core`, `galley_cli` and `galley_server` 0.3.10 (DESIGN D8).
+- The packer records each frame's `pixels`, a SHA-256 of its width, height and RGBA bytes, from
+  the render it checked twice (`FramePixels.digest`), so a later round can say which frames
+  changed (DESIGN D17). It depends on `crypto`. The round's files are otherwise the same.
 
 ## 0.3.9 (unreleased)
 

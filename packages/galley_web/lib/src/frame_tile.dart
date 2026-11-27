@@ -105,6 +105,20 @@ class _FrameTileState extends State<FrameTile> {
             style: const TextStyle(fontSize: 13, color: Colors.white60),
           ),
         ),
+        // Since the reviewer's last visit (D17): a frame to look at again says so on the board
+        // too, so the reviewer finds it without the list. The same frames say nothing.
+        if (switch (widget.model.changeOf(_record.key)) {
+              FrameAdded() => 'new',
+              FrameChanged() => 'changed',
+              FrameUncompared() => 'not compared',
+              FrameGone() || FrameSame() || null => null,
+            }
+            case final since?)
+          Padding(
+            key: ValueKey('since ${_record.key}'),
+            padding: const EdgeInsets.only(left: 6),
+            child: Text(since, style: const TextStyle(fontSize: 12, color: Color(0xFF8AB4F8))),
+          ),
         if (findings.isNotEmpty)
           Tooltip(
             message: findings.join('\n'),

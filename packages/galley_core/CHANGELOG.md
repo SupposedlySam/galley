@@ -6,6 +6,16 @@ patch (DESIGN D8).
 
 ## 0.3.10 (unreleased)
 
+What changed since a reviewer's last visit (DESIGN D17):
+- `FrameRecord.pixels`: the SHA-256, in lower-case hex, of the frame's pixels, set by the
+  packer. Optional, and refused without an `image`; rounds packed before 0.3.10 have none.
+- `changesSince(since, shown, sinceN:, shownN:)`: every frame of a round as it compares with an
+  earlier one, as `FrameAdded`, `FrameChanged`, `FrameSame`, `FrameGone` or `FrameUncompared`
+  (with why: no digest, or no image).
+- `Visit` and `visitTo`: a reviewer's last round opened and the one before it, which a reload
+  does not move. `Galley.opened(n, by:)` records a visit and returns the round opened before.
+  Not breaking under D8: an app's host does not implement or call `Galley`.
+
 - `PlacedMark.raisedIn`: the round the mark was raised on, beside the round it was last placed
   in. Null when no galley records it: a hand-written mark, or work items written before
   0.3.10. Work items carry it as `raised_in`, read back as null when absent.

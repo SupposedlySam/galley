@@ -40,6 +40,8 @@ const maxFileBytes = 20 * 1024 * 1024;
 ///   the form [Placements.toJson] writes), and `marks`, the rows of every mark raised on an
 ///   earlier round.
 /// - `member`: the `alias` an invitee chose, and `aliases`, the galley's others.
+/// - `visit`: `visit`, the member's visit as written ({latest, before}), `kept`, the one stored
+///   before it or null, and `finished`, the numbers of the galley's finished rounds.
 JsonMap judge(Object? request) {
   try {
     final r = JsonReader(request, 'request');
@@ -50,6 +52,7 @@ JsonMap judge(Object? request) {
       'file' => _file(r),
       'finish' => _finish(r),
       'member' => _member(r),
+      'visit' => _visit(r),
       final other => throw FormatException('request.write: no write "$other"'),
     };
     return why == null ? {'ok': true} : {'refused': why};
@@ -166,6 +169,23 @@ String? _member(JsonReader r) {
     for (final (i, a) in r.list('aliases').indexed) _aliasKey(_string(a, 'request.aliases[$i]')),
   };
   if (same.contains(_aliasKey(alias))) return 'a member of this galley is already "$alias"';
+  return null;
+}
+
+/// A visit is what [visitTo] makes of the one kept and the round opened, and that round is a
+/// finished one: so the round a member is shown the changes since is one they opened, and the
+/// two rounds of a visit are never written out of order.
+String? _visit(JsonReader r) {
+  final visit = r.read('visit', Visit.fromJson);
+  final kept = r.readOptional('kept', Visit.fromJson);
+  final n = visit.latest;
+  if (!r.integers('finished').contains(n)) return 'the galley has no finished round $n';
+  final next = visitTo(n, kept);
+  if (next == kept) return 'round $n is no newer than round ${kept!.latest}, opened already';
+  if (next != visit) {
+    return 'a visit to round $n after ${kept == null ? 'none' : 'round ${kept.latest}'} is '
+        'before ${next.before ?? 'none'}, not ${visit.before ?? 'none'}';
+  }
   return null;
 }
 

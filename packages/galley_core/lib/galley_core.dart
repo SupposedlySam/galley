@@ -3,6 +3,7 @@
 library;
 
 export 'src/anchor.dart';
+export 'src/changes.dart';
 export 'src/commit.dart';
 export 'src/device.dart';
 export 'src/frame_key.dart';
@@ -20,4 +21,5 @@ export 'src/round.dart';
 export 'src/record.dart';
 export 'src/source_location.dart';
 export 'src/stored_round.dart';
+export 'src/visit.dart';
 export 'src/write_rules.dart';

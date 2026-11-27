@@ -58,6 +58,12 @@ final class ServedGalley implements Galley {
     return JsonReader(reply, 'recorded').read('mark', Mark.fromJson);
   }
 
+  @override
+  Future<int?> opened(int n, {required String by}) async {
+    final reply = await _post(_api(['visits']), {'round': n, 'by': by});
+    return JsonReader(reply, 'visit').optionalInteger('before');
+  }
+
   /// A path under `/api`, each segment encoded: a frame's file name holds `=` and `;`.
   /// `/api/<segments>` on [base]'s server. Built from [base]'s parts, not with [Uri.replace]:
   /// there a null query keeps the page's own (`?by=<name>`), which would then ride on every

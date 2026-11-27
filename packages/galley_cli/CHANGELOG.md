@@ -27,6 +27,14 @@ The reviewer's side of the canvas (ROADMAP step 7):
   or no image was captured.
 - Verify and reopen read "Looks right" and "Not yet".
 
+What changed since your last visit (DESIGN D17):
+- The canvas lists the frames new, changed, gone and not compared since the round you opened
+  before, each a tap from the board, counts the ones that are the same, and marks the frames
+  on the board too. A first visit says so; one that is not known says why.
+- `galley serve` keeps each reviewer's visit in `visits.json`, by name: `POST /api/visits
+  {"round", "by"}` records one and gives the round opened before. The canvas records it when
+  the round is shown and you are named (`?by=`, or the name field on Enter).
+
 ## 0.3.9 (unreleased)
 
 A Galley server on this machine (DESIGN D15):

@@ -98,6 +98,25 @@ final class LocalGalley implements Galley {
     return next;
   }
 
+  /// Refused for a round that has not finished, and for a blank [by]: a visit by nobody is
+  /// nobody's to be shown.
+  ///
+  /// Nothing is written when the visit does not change (a reload), so reading the canvas does
+  /// not rewrite the file.
+  @override
+  Future<int?> opened(int n, {required String by}) async {
+    final name = by.trim();
+    if (name.isEmpty) throw const Refused.invalid('a visit says who opened the round');
+    if (!directory.rounds().contains(n)) {
+      throw Refused.missing('${directory.path} has no finished round $n');
+    }
+    final visits = directory.visits();
+    final kept = visits[name];
+    final next = visitTo(n, kept);
+    if (next != kept) directory.saveVisits({...visits, name: next});
+    return next.before;
+  }
+
   /// [path] made absolute with no `.` or `..` in it. `--app` defaults to `.`, and an agent
   /// handed `app/./.galley/...` has a path that works and reads as a mistake.
   static String _absolute(String path) => File(path).absolute.uri.normalizePath().toFilePath();

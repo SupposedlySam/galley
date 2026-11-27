@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -157,6 +159,23 @@ final class FramePixels {
 
   /// The image, four bytes a pixel, row by row.
   final Uint8List rgba;
+
+  /// The SHA-256, in lower-case hex, of the width and the height (each four bytes, big-endian),
+  /// then [rgba]: what [FrameRecord.pixels] keeps, so two rounds' frames are compared by their
+  /// pixels and not their PNGs (docs/DESIGN.md D17). The size is in it because the same bytes
+  /// are another image at another width.
+  String get digest {
+    final size = ByteData(8)
+      ..setUint32(0, width)
+      ..setUint32(4, height);
+    // In chunks: a list of both would copy a phone screen's ten megabytes into boxed ints.
+    late Digest digest;
+    sha256.startChunkedConversion(ChunkedConversionSink.withCallback((d) => digest = d.single))
+      ..add(size.buffer.asUint8List())
+      ..add(rgba)
+      ..close();
+    return '$digest';
+  }
 
   /// The smallest rectangle, in logical pixels at [pixelRatio], holding every pixel that
   /// differs from [other]. Null when none does. Throws an [ArgumentError] when the sizes differ.

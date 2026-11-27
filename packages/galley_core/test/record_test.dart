@@ -18,8 +18,11 @@ FrameRecord _record({
     Finding(kind: 'frozen', message: 'still animating', rect: const LogicalRect(1, 2, 3, 4)),
   ],
   image: 'frames/x.png',
+  pixels: _digest,
   tree: 'trees/x.json',
 );
+
+final _digest = 'ab' * 32;
 
 void main() {
   group('FrameRecord', () {
@@ -35,6 +38,24 @@ void main() {
       expect(back.landing, isA<LandingUnknown>());
       expect(back.findings.single.rect, const LogicalRect(1, 2, 3, 4));
       expect(back.device.provenance, Provenance.assumed);
+      expect(back.pixels, _digest);
+    });
+
+    test('a digest of pixels is read when there is none, and refused when it cannot be one', () {
+      final older = _record().toJson()..remove('pixels');
+      expect(FrameRecord.fromJson(older, 'r').pixels, isNull, reason: 'packed before 0.3.10');
+      expect(FrameRecord.fromJson(older, 'r').image, 'frames/x.png');
+      for (final bad in ['AB' * 32, 'ab' * 31, 'zz' * 32, '']) {
+        expect(
+          () => FrameRecord.fromJson(_record().toJson()..['pixels'] = bad, 'r'),
+          throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('SHA-256'))),
+          reason: bad,
+        );
+      }
+      expect(
+        () => FrameRecord.fromJson(_record().toJson()..remove('image'), 'r'),
+        throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('no image'))),
+      );
     });
 
     test('an error needs an error, and only an error may have one', () {

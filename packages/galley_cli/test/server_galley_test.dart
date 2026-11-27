@@ -183,4 +183,68 @@ void main() {
     ]);
     expect(await rae.rounds(), [1, 2]);
   });
+
+  test('a reviewer is told the round they opened before this one, and two tabs at once keep one '
+      'visit', () async {
+    final galley = await owner.makeGalley('Visited');
+    await owner.create('invites', {'galley': galley, 'email': 'kit@example.com'});
+    final joined = await As.signIn(server, 'kit@example.com');
+    final member = await joined.create('members', {
+      'galley': galley,
+      'user': joined.id,
+      'role': 'reviewer',
+      'alias': 'Kit',
+    });
+    expect(member.status, 200, reason: '${member.body}');
+    final session = await signIn('kit@example.com');
+    ServerGalley tab() => ServerGalley(pocketBase(), galleyId: galley, session: session);
+    final kit = tab();
+    await push(galley, 1);
+
+    await expectLater(
+      kit.opened(1, by: 'Rae'),
+      throwsA(isA<Refused>().having((e) => e.message, 'message', contains('as Kit, not Rae'))),
+    );
+    await expectLater(
+      kit.opened(2, by: 'Kit'),
+      throwsA(isA<Refused>().having((e) => e.kind, 'kind', RefusalKind.missing)),
+    );
+    expect(await joined.records('visits'), isEmpty, reason: 'neither refusal wrote one');
+
+    expect(await kit.opened(1, by: 'Kit'), isNull, reason: 'a first visit');
+    expect(await kit.opened(1, by: 'Kit'), isNull, reason: 'a reload');
+    await push(galley, 2);
+    await push(galley, 3);
+    expect(await kit.opened(3, by: 'Kit'), 1);
+    expect(await kit.opened(3, by: 'Kit'), 1, reason: 'a reload shows the same changes');
+    expect(await kit.opened(2, by: 'Kit'), 1, reason: 'an older round moves nothing');
+
+    // Both tabs read the visit to round 3 and send round 4's: one is refused, reads again,
+    // and finds its visit kept by the other.
+    await push(galley, 4);
+    expect(await Future.wait([tab().opened(4, by: 'Kit'), tab().opened(4, by: 'Kit')]), [3, 3]);
+    final rows = await joined.records('visits');
+    expect(rows.map((r) => (r['latest'], r['before'])), [(4, 3)]);
+  });
+
+  test('two tabs at once on a first visit make one row', () async {
+    final galley = await owner.makeGalley('Visited twice');
+    await owner.create('invites', {'galley': galley, 'email': 'lee@example.com'});
+    final joined = await As.signIn(server, 'lee@example.com');
+    await joined.create('members', {
+      'galley': galley,
+      'user': joined.id,
+      'role': 'reviewer',
+      'alias': 'Lee',
+    });
+    final session = await signIn('lee@example.com');
+    ServerGalley tab() => ServerGalley(pocketBase(), galleyId: galley, session: session);
+    await push(galley, 1);
+    expect(await Future.wait([tab().opened(1, by: 'Lee'), tab().opened(1, by: 'Lee')]), [
+      null,
+      null,
+    ]);
+    final rows = await joined.records('visits');
+    expect(rows.map((r) => (r['latest'], r['before'])), [(1, 0)]);
+  });
 }
