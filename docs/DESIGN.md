@@ -820,8 +820,13 @@ the same widget now (`compare.dart`).
 - *Mutation, 2026-11-27:* 16 mutants of the queue, the next mark, the read of a round and the
   crop. One survived (the queue of a reviewer with no name) until a test reached it with a mark
   naming nobody; all are killed.
-- **Built since, in D17:** the frames new or changed since your last visit. Not checked yet:
-  the crops in a real browser.
+- **Built since, in D17:** the frames new or changed since your last visit.
+- *Seen in a real browser, 2026-11-27* (headless Chrome against `galley serve`, the toy
+  round): a mark raised on round 2, answered with a commit and carried to round 5 is listed as
+  "1 answer waits on you" with the answer's commit and note; clicking it shows "As you marked
+  it, round 2" beside "Now, round 5", each a crop around the button with its box and pin, and
+  "Looks right" and "Not yet" under them. Round 3, which a pack interrupted, has no index and
+  is skipped: the mark names round 2, the newest finished, as designed.
 
 ## D17 · What changed since your last visit (2026-11-27)
 
@@ -861,5 +866,11 @@ ones that are the same (`changesSince`, `CanvasModel.since`).
   behind the hook, so it is read, as the events index is (galley_cli's `host_test.dart`). All
   are killed.
 - **Not built:** a reviewer choosing which round to compare with; changes in a round that is
-  not the newest; marking a frame as looked at. Not checked yet: the section in a real
-  browser.
+  not the newest; marking a frame as looked at.
+- *Seen in a real browser, 2026-11-27:* with round 2's home frame on Pixel 7 given other
+  pixels, Rae's visit to round 5 after round 2 reads "Since your last visit, round 2 · 1
+  changed · 0 new · 0 gone · 0 not compared · 5 the same", lists that frame, and badges it
+  "changed" on the board; `visits.json` holds `latest: 5, before: 2`. The badge is small at
+  the board's zoom. The toy's img frames draw dark because nothing in them is opaque (no
+  Scaffold): their records carry the `unpainted` and `network-image` findings, so the board
+  shows through, as it should.
