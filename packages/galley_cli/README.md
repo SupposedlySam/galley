@@ -25,7 +25,9 @@ if the app's tree had uncommitted changes (DESIGN D11).
 `serve` serves the galley over HTTP on loopback until Ctrl-C (DESIGN D13): `GET /api/galley`,
 `GET /api/marks` (what `pull --json --all` lists, with each image as a URL), `GET
 /api/rounds/<n>/<file>`, `POST /api/marks` and `POST /api/marks/<id>/events`. A POST is
-`application/json`, and a request whose Host is not `localhost` or `127.0.0.1` is refused.
+`application/json`, and a request whose Host is not loopback is refused. A frame is its key or
+its axes. A malformed request is 400, a well-formed one that cannot be 422, a mark that is not
+there 404, and an event its mark's status does not allow 409.
 `--web <dir>` serves a built canvas at `/`.
 
 `pull --json` is for an agent working through the marks:

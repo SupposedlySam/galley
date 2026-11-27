@@ -194,7 +194,7 @@ final class _Pack extends _GalleyCommand {
         )
         .render(g.roundPath(n));
     if (!g.rounds().contains(n)) {
-      throw Refused(
+      throw Refused.environment(
         'round $n did not finish: the galley test exited $exit and wrote no index.json. '
         'What it did write is kept in ${g.roundPath(n)}.',
       );
@@ -443,13 +443,15 @@ final class _Serve extends _GalleyCommand {
     }
     final web = _args.option('web');
     if (web != null && !File('$web/index.html').existsSync()) {
-      throw Refused('$web has no index.html: give the canvas\'s build directory');
+      throw Refused.invalid('$web has no index.html: give the canvas\'s build directory');
     }
     final GalleyServer server;
     try {
       server = await GalleyServer.start(local, port: port, web: web);
     } on SocketException catch (e) {
-      throw Refused('could not listen on port $port (${e.osError?.message ?? e.message})');
+      throw Refused.environment(
+        'could not listen on port $port (${e.osError?.message ?? e.message})',
+      );
     }
     c.out.writeln('Serving ${galley.path} at ${server.url}  (Ctrl-C stops it)');
     await c.untilStopped();

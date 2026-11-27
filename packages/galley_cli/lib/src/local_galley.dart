@@ -27,7 +27,8 @@ final class LocalGalley {
   /// The latest finished round. Refused when there is none.
   int latestRound() {
     final rounds = directory.rounds();
-    if (rounds.isEmpty) throw Refused('${directory.path} has no rounds yet: run `galley pack`');
+    if (rounds.isEmpty)
+      throw Refused.conflict('${directory.path} has no rounds yet: run `galley pack`');
     return rounds.last;
   }
 
@@ -44,9 +45,10 @@ final class LocalGalley {
   }) async {
     final n = latestRound();
     final found = (await directory.readRound(n)).round.frame(frame);
-    if (found == null) throw Refused('round $n has no frame $frame');
+    if (found == null) throw Refused.invalid('round $n has no frame $frame');
     final tree = found.tree;
-    if (tree == null) throw Refused('frame $frame in round $n has no tree to pin a widget of');
+    if (tree == null)
+      throw Refused.conflict('frame $frame in round $n has no tree to pin a widget of');
     final (node, pin) = switch (target) {
       AtPoint(:final x, :final y) => switch (tree.deepestAt(x, y)) {
         final node? => (node, PinOffset.within(node.rect, x, y)),
@@ -54,9 +56,9 @@ final class LocalGalley {
       },
       AtNode(:final path) => (tree.at(path), const PinOffset(0.5, 0.5)),
     };
-    if (node == null || pin == null) throw Refused('no widget at $target in frame $frame');
-    if (note.trim().isEmpty) throw const Refused('a mark says what is wrong');
-    if (by.trim().isEmpty) throw const Refused('a mark says who raised it');
+    if (node == null || pin == null) throw Refused.invalid('no widget at $target in frame $frame');
+    if (note.trim().isEmpty) throw const Refused.invalid('a mark says what is wrong');
+    if (by.trim().isEmpty) throw const Refused.invalid('a mark says who raised it');
 
     final mark = Mark(
       id: newId(),
@@ -78,13 +80,13 @@ final class LocalGalley {
   /// Refused when there is no such mark, or when its status does not allow the event.
   Mark record(String id, MarkEvent Function(DateTime at) build) {
     final mark = directory.mark(id);
-    if (mark == null) throw Refused('no mark "$id" in ${directory.path}');
+    if (mark == null) throw Refused.missing('no mark "$id" in ${directory.path}');
     final event = build(now().toUtc());
     final Mark next;
     try {
       next = mark.record(event);
     } on StateError {
-      throw Refused('mark $id is ${mark.status.name}, and cannot be ${_verb(event)} now');
+      throw Refused.conflict('mark $id is ${mark.status.name}, and cannot be ${_verb(event)} now');
     }
     directory.saveMark(next);
     return next;
@@ -105,7 +107,8 @@ final class LocalGalley {
       '--quiet',
       '$given^{commit}',
     ], workingDirectory: repository);
-    if (r.exitCode != 0) throw Refused('$given is not a commit in the repository at $repository');
+    if (r.exitCode != 0)
+      throw Refused.invalid('$given is not a commit in the repository at $repository');
     return '${r.stdout}'.trim();
   }
 
@@ -189,16 +192,49 @@ final class AtNode extends PinTarget {
 }
 
 /// What was asked cannot be done, and [message] says why. The CLI prints it and exits 1; the
-/// server answers 409 with it.
+/// server answers with the status its [kind] names.
+///
+/// Every refusal names its kind. Rejected: one kind for all, which is what 0.3.5 had. Its
+/// server answered 409 to a blank note, and a client could not tell "fix your input" from "the
+/// mark moved on". Rejected too: a default kind, which would be a guess wearing a label.
 final class Refused implements Exception {
-  /// Refused, because of [message].
-  const Refused(this.message);
+  /// The request is well formed and means something that cannot be: a blank note, a frame the
+  /// round does not have, a commit that is not one.
+  const Refused.invalid(this.message) : kind = RefusalKind.invalid;
+
+  /// What the request is addressed to is not there: no such mark.
+  const Refused.missing(this.message) : kind = RefusalKind.missing;
+
+  /// The galley's state does not allow it now: a mark that is not answered cannot be verified,
+  /// and a galley with no rounds has nothing to mark.
+  const Refused.conflict(this.message) : kind = RefusalKind.conflict;
+
+  /// Something on this machine failed: a flutter that cannot run, a port that is taken.
+  const Refused.environment(this.message) : kind = RefusalKind.environment;
 
   /// Why.
   final String message;
 
+  /// Which kind of refusal it is.
+  final RefusalKind kind;
+
   @override
   String toString() => 'Refused: $message';
+}
+
+/// The kinds of [Refused], as the server tells them apart.
+enum RefusalKind {
+  /// See [Refused.invalid].
+  invalid,
+
+  /// See [Refused.missing].
+  missing,
+
+  /// See [Refused.conflict].
+  conflict,
+
+  /// See [Refused.environment].
+  environment,
 }
 
 /// The word a person reads for [p].

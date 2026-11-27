@@ -63,7 +63,7 @@ final class FlutterTestRenderer implements RoundRenderer {
         mode: ProcessStartMode.inheritStdio,
       );
     } on ProcessException catch (e) {
-      throw Refused(
+      throw Refused.environment(
         'could not run "$flutter" (${e.message}). --flutter is one executable, not a command: '
         'for fvm, give the absolute path of its flutter',
       );

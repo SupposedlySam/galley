@@ -14,15 +14,17 @@ import 'local_galley.dart';
 ///                                   as a URL under /api/rounds
 /// GET  /api/rounds/<n>/<path>       a file of finished round n: index.json, records/, trees/,
 ///                                   frames/
-/// POST /api/marks                   {"frame": {...}, "node": [0, 1] | "at": [x, y], "note",
-///                                   "by"} -> 201 {"mark", "status", "node", "round"}
+/// POST /api/marks                   {"frame": "<key>" | {...}, "node": [0, 1] | "at": [x, y],
+///                                   "note", "by"} -> 201 {"mark", "status", "node", "round"}
 /// POST /api/marks/<id>/events       a MarkEvent's JSON without "at" -> 200 {"mark", "status"}
 /// GET  /<path>                      the canvas's files from `web`, when it is given
 /// ```
 ///
-/// A refusal is 409 with {"error"}, a malformed request 400, anything not found 404.
+/// Every error is {"error"}: a malformed request 400, a well-formed one that means something
+/// impossible 422 (a blank note, a frame the round lacks), anything not found 404, and a mark
+/// whose status does not allow the event 409.
 ///
-/// It is for one machine. It binds loopback only, and refuses a request whose Host is not
+/// It is for one machine. It binds loopback only, IPv4 and IPv6, and refuses a request whose Host is not
 /// loopback at its port: a page on another site that rebinds its name to 127.0.0.1 reaches the
 /// socket, but sends its own name as the Host (DNS rebinding). A POST must be
 /// `application/json`, which a page on another origin cannot send without a CORS preflight, and
@@ -31,17 +33,36 @@ import 'local_galley.dart';
 /// request says (`by`), as it is for the commands: whoever can reach this socket can already
 /// write the galley's files.
 final class GalleyServer {
-  GalleyServer._(this._server, this._local, this._web);
+  GalleyServer._(this._servers, this._local, this._web);
 
   /// Serves [local] on loopback at [port] (0 picks a free one), and the canvas from [web].
+  ///
+  /// On `127.0.0.1` and, at the same port, `::1`: a client that resolves `localhost` to `::1`
+  /// first and does not fall back would otherwise find nothing. A machine with no IPv6
+  /// loopback is served on IPv4 alone; a port taken on `::1` fails the start, as on IPv4.
   static Future<GalleyServer> start(LocalGalley local, {int port = 0, String? web}) async {
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
-    final s = GalleyServer._(server, local, web);
-    server.listen(s._handle);
+    final v4 = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+    final servers = [v4];
+    try {
+      servers.add(await HttpServer.bind(InternetAddress.loopbackIPv6, v4.port));
+    } on SocketException catch (e) {
+      if (!_noIpv6(e)) {
+        await v4.close();
+        rethrow;
+      }
+    }
+    final s = GalleyServer._(servers, local, web);
+    for (final server in servers) {
+      server.listen(s._handle);
+    }
     return s;
   }
 
-  final HttpServer _server;
+  /// The OS has no IPv6 loopback (EADDRNOTAVAIL or EAFNOSUPPORT), as opposed to a port in use.
+  static bool _noIpv6(SocketException e) =>
+      const {49, 99, 47, 97, 10047, 10049}.contains(e.osError?.errorCode);
+
+  final List<HttpServer> _servers;
   final LocalGalley _local;
   final String? _web;
 
@@ -49,10 +70,12 @@ final class GalleyServer {
   static const maxBody = 1 << 20;
 
   /// Where it is.
-  Uri get url => Uri.parse('http://localhost:${_server.port}/');
+  Uri get url => Uri.parse('http://localhost:$_port/');
+
+  int get _port => _servers.first.port;
 
   /// Stops serving. A request in progress is finished.
-  Future<void> close() => _server.close();
+  Future<void> close() => Future.wait([for (final s in _servers) s.close()]);
 
   Future<void> _handle(HttpRequest request) async {
     final response = request.response;
@@ -70,7 +93,7 @@ final class GalleyServer {
     } on _Status catch (e) {
       _json(response, e.code, {'error': e.message});
     } on Refused catch (e) {
-      _json(response, 409, {'error': e.message});
+      _json(response, _refusalStatus[e.kind]!, {'error': e.message});
     } on StateError catch (e) {
       _json(response, 409, {'error': e.message});
     } on FormatException catch (e) {
@@ -81,10 +104,16 @@ final class GalleyServer {
     await response.close();
   }
 
-  bool _isLoopbackHost(HttpRequest request) {
-    final host = request.headers.host;
-    return (host == 'localhost' || host == '127.0.0.1') && request.headers.port == _server.port;
-  }
+  static const _refusalStatus = {
+    RefusalKind.invalid: 422,
+    RefusalKind.missing: 404,
+    RefusalKind.conflict: 409,
+    RefusalKind.environment: 500,
+  };
+
+  bool _isLoopbackHost(HttpRequest request) =>
+      const {'localhost', '127.0.0.1', '[::1]'}.contains(request.headers.host) &&
+      request.headers.port == _port;
 
   Future<void> _api(HttpRequest request, List<String> path) async {
     final get = request.method == 'GET', post = request.method == 'POST';
@@ -106,7 +135,7 @@ final class GalleyServer {
           _ => throw const FormatException('request: give one of "node": [0, 1] and "at": [x, y]'),
         };
         final raised = await _local.raise(
-          frame: FrameKey(_strings(json['frame'], 'request.frame')),
+          frame: _frame(json['frame']),
           target: target,
           note: body.string('note'),
           by: body.string('by'),
@@ -218,12 +247,15 @@ final class GalleyServer {
     }
   }
 
-  static Map<String, String> _strings(Object? json, String context) => switch (json) {
-    final Map<String, Object?> m => {
+  /// A frame as its key, the form a mark's JSON carries, or as an object of axis to value, the
+  /// form a record's axes read as. Both, so whatever the client read a frame from goes back.
+  static FrameKey _frame(Object? json) => switch (json) {
+    final String key => FrameKey.parse(key),
+    final Map<String, Object?> m => FrameKey({
       for (final MapEntry(:key, :value) in m.entries)
-        key: value is String ? value : throw FormatException('$context.$key: not a string'),
-    },
-    _ => throw FormatException('$context: not an object of axis to value'),
+        key: value is String ? value : throw FormatException('request.frame.$key: not a string'),
+    }),
+    _ => throw const FormatException('request.frame: not a key or an object of axis to value'),
   };
 
   static void _json(HttpResponse response, int code, Object? body) {

@@ -75,8 +75,8 @@ void main() {
 
   /// The request exactly as written, so a path an HTTP client would normalize (`..`) reaches
   /// the server as sent. Returns the status code.
-  Future<int> raw(String target, {String? host}) async {
-    final socket = await Socket.connect(InternetAddress.loopbackIPv4, server.url.port);
+  Future<int> raw(String target, {String? host, InternetAddress? to}) async {
+    final socket = await Socket.connect(to ?? InternetAddress.loopbackIPv4, server.url.port);
     socket.write(
       'GET $target HTTP/1.1\r\nHost: ${host ?? 'localhost:${server.url.port}'}\r\n'
       'Connection: close\r\n\r\n',
@@ -134,6 +134,14 @@ void main() {
     expect(await raw('/api/galley', host: 'evil.example:${server.url.port}'), 403);
     expect(await raw('/api/galley', host: 'localhost:1'), 403, reason: 'another port');
     expect(await raw('/api/galley', host: 'localhost.evil.example'), 403);
+    expect(await raw('/api/galley', host: '[::2]:${server.url.port}'), 403);
+  });
+
+  test('it answers on IPv6 loopback too, at the same port', () async {
+    final v6 = InternetAddress.loopbackIPv6;
+    expect(await raw('/api/galley', to: v6, host: '[::1]:${server.url.port}'), 200);
+    expect(await raw('/api/galley', to: v6), 200, reason: 'Host: localhost, reached on ::1');
+    expect(await raw('/api/galley', to: v6, host: 'evil.example:${server.url.port}'), 403);
   });
 
   test('a mark raised here is saved, placed, and listed with its image as a URL', () async {
@@ -155,16 +163,20 @@ void main() {
     expect(g.mark('m1')!.note, 'too tight');
     expect(g.placements(1)!.of('m1'), isNotNull);
 
-    await json(
+    // The key string a mark's JSON carries is taken back as it is.
+    expect((raised['mark']! as JsonMap)['frame'], 'screen=drawn');
+    final (secondCode, second) = await json(
       'POST',
       '/api/marks',
       body: {
-        'frame': {'screen': 'blank'},
+        'frame': 'screen=blank',
         'node': [0],
         'note': 'n',
         'by': 'r',
       },
     );
+    expect(secondCode, 201, reason: '$second');
+    expect(g.mark('m2')!.frame, FrameKey({'screen': 'blank'}));
     final (listCode, list) = await json('GET', '/api/marks');
     expect(listCode, 200);
     final items = ((list! as JsonMap)['items']! as List).cast<JsonMap>();
@@ -183,14 +195,14 @@ void main() {
       'by': 'r',
     };
     for (final (body, code, error) in [
-      ({...good, 'note': ' '}, 409, 'a mark says what is wrong'),
-      ({...good, 'by': ''}, 409, 'a mark says who raised it'),
+      ({...good, 'note': ' '}, 422, 'a mark says what is wrong'),
+      ({...good, 'by': ''}, 422, 'a mark says who raised it'),
       (
         {
           ...good,
           'frame': {'screen': 'gone'},
         },
-        409,
+        422,
         'has no frame',
       ),
       (
@@ -198,7 +210,7 @@ void main() {
           ...good,
           'node': [5],
         },
-        409,
+        422,
         'no widget',
       ),
       (
@@ -219,6 +231,8 @@ void main() {
         400,
         'not a string',
       ),
+      ({...good, 'frame': 'screen'}, 400, 'not axis=value'),
+      ({...good, 'frame': 7}, 400, 'not a key or an object'),
     ]) {
       final (got, reply) = await json('POST', '/api/marks', body: body);
       expect(got, code, reason: '$body');
@@ -258,7 +272,7 @@ void main() {
       'by': 'c',
       'answer': {'kind': 'fixed', 'commit': 'abcdef1'},
     });
-    expect(code, 409);
+    expect(code, 422);
     expect((body! as JsonMap)['error'], contains('is not a commit'));
 
     (code, body) = await event({
@@ -279,7 +293,8 @@ void main() {
 
     expect(
       (await json('POST', '/api/marks/m9/events', body: {'event': 'verified', 'by': 'r'})).$1,
-      409,
+      404,
+      reason: 'no such mark',
     );
     expect((await event({'event': 'deleted', 'by': 'r'})).$1, 400);
   });

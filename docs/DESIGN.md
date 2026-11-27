@@ -277,7 +277,7 @@ GitHub repo. Before pub.dev, an app pins a tag:
 ```yaml
 dev_dependencies:
   galley:
-    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.5}
+    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.6}
 ```
 
 - **Why not a path dependency:** CI and fresh clones have no sibling checkout, so `pub get`
@@ -448,12 +448,14 @@ server. The two would drift on what they refuse.
 GET  /api/galley                rounds, latest_round
 GET  /api/marks                 every mark as a work item; image is a URL under /api/rounds
 GET  /api/rounds/<n>/<path>     a file of a finished round
-POST /api/marks                 frame, node | at, note, by       -> 201 mark, status, node, round
+POST /api/marks                 frame (key | axes), node | at,   -> 201 mark, status, node, round
+                                note, by
 POST /api/marks/<id>/events     a MarkEvent's JSON, without at   -> 200 mark, status
 GET  /<path>                    the built canvas, from --web
 ```
 
-- **It is for one machine.** It binds loopback only. The outside reviewers are served by the
+- **It is for one machine.** It binds loopback only, `127.0.0.1` and `::1` at one port, so a
+  client that tries `::1` first and does not fall back still finds it. The outside reviewers are served by the
   server of D7, not by this one.
 - **The Host must be loopback at its own port.** A page on another site can rebind its name
   to 127.0.0.1 and reach the socket (DNS rebinding), but it still sends its own name as the
@@ -471,13 +473,21 @@ GET  /<path>                    the built canvas, from --web
   and symlinks resolved, must be under the resolved root. A round that did not finish (no
   `index.json`) serves nothing. Rejected: also refusing `..` and encoded separators one segment
   at a time. Mutation found no request that check refused and the root rule let through.
-- **A refusal is 409.** A malformed request is 400, a wrong content type 415, a body over 1 MB
-  413, a wrong method 405, and anything not found 404. An oversized body is read to the end
+- **A refusal says what kind it is** (`Refused.invalid`, `missing`, `conflict`,
+  `environment`), and the server answers 422, 404, 409 or 500 for it. A malformed request is
+  400, a wrong content type 415, a body over 1 MB 413, and a wrong method 405. 409 is kept for
+  a mark whose status does not allow the event, so a client can tell "fix the input" from "the
+  mark moved on". *Corrected in 0.3.6:* 0.3.5 answered every refusal 409, a blank note
+  included. The first app to call it reported that. An oversized body is read to the end
   and dropped before the answer is sent. Answering early resets the connection, and the
   client sees a broken pipe instead of a 413.
+- **A frame is taken as its key or as its axes.** A mark's JSON carries the key string, and a
+  record's axes read as an object, so whichever a client read goes back as it is.
 - **The port defaults to 7340**, so the canvas's address can be bookmarked. Rejected: a free
   port each run, which would print a new address every time.
 - *Mutation, 2026-11-26:* 20 mutants of the server were run, and every one left in the code
   is killed. The two that survived were the per-segment checks, and they were removed (see
-  above). Not decided yet: how the built canvas ships to an app that adopts Galley by git tag.
+  above). In 0.3.6, 12 more for the refusal kinds, the IPv6 bind and the key form, all killed.
+  Not tested: the fallback to IPv4 alone on a machine with no IPv6 loopback. Not decided yet:
+  how the built canvas ships to an app that adopts Galley by git tag.
   That comes with the canvas.
