@@ -4,6 +4,10 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.10 (unreleased)
+
+- No changes. Released with `galley_core`, `galley_cli` and `galley_server` 0.3.10 (DESIGN D8).
+
 ## 0.3.9 (unreleased)
 
 - A widget's source location is recorded as a path inside the app's package

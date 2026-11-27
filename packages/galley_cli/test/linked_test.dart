@@ -534,7 +534,7 @@ void main() {
 
       expect(await rae.run(['pull', '--json', '--all']), 0);
       final item = ((jsonDecode('${rae.out}') as Map)['items'] as List).single as Map;
-      expect(item['round'], 2);
+      expect((item['round'], item['raised_in']), (2, 1));
       expect(
         [
           for (final e in ((item['mark'] as Map)['history'] as List).cast<Map<String, Object?>>())

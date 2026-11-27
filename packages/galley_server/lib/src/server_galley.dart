@@ -319,14 +319,14 @@ final class ServerGalley implements Galley {
   ) {
     for (final r in finished.reversed) {
       if (placements[r.number]?.of(m.mark.id) case final carried?) {
-        return PlacedMark(r.number, carried);
+        return PlacedMark(r.number, carried, raisedIn: m.round);
       }
     }
     final raisedOn = m.round;
     if (raisedOn == null) {
       throw Refused.damaged('mark ${m.mark.id} was raised on a round that is not finished');
     }
-    return PlacedMark(raisedOn, Carried.raised(m.mark));
+    return PlacedMark(raisedOn, Carried.raised(m.mark), raisedIn: raisedOn);
   }
 
   Uri _fileUrl(JsonMap record) {

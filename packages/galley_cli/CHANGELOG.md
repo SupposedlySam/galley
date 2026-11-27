@@ -4,6 +4,22 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.10 (unreleased)
+
+- `galley pull --json` gives each mark's `raised_in`, the round it was raised on, beside
+  `round`, where it was last placed. On this machine it is the first round whose placements
+  record the mark as raised; a mark no round records is `null`.
+
+The reviewer's side of the canvas (ROADMAP step 7):
+- What waits on you: above every mark, the marks you raised that were answered, the one
+  answered longest ago first, each with its answer. Saying "Looks right" or "Not yet" on one
+  opens the next; the last opens the list.
+- An answered mark's thread shows the widget as you marked it, cropped from the frame of the
+  round it was raised on, beside the same widget in the round shown. Each round is read once.
+  What cannot be shown is said: the round raised on is not recorded, the frame is not in it,
+  or no image was captured.
+- Verify and reopen read "Looks right" and "Not yet".
+
 ## 0.3.9 (unreleased)
 
 A Galley server on this machine (DESIGN D15):

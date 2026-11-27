@@ -199,6 +199,7 @@ void main() {
     expect(placed(round2), ['m1 moved', 'm2 retired']);
     final m1 = (round2['items']! as List).cast<JsonMap>().first;
     expect(m1['round'], 2);
+    expect(m1['raised_in'], 1, reason: 'raised on round 1, last placed in round 2');
     expect(File(m1['image']! as String).existsSync(), isTrue, reason: '${m1['image']}');
     expect((m1['anchor']! as JsonMap)['location'], {
       'file': 'package:app/screens.dart',
@@ -298,6 +299,27 @@ void main() {
     expect('$out', contains('m2: raised on FilledButton(buy) at 0 in round 2'));
     expect(store().placements(2)!.of('m2'), isNotNull);
     expect(store().placements(1)!.of('m2'), isNull);
+    expect(
+      [for (final p in store().lastPlaced()) (p.mark.id, p.round, p.raisedIn)],
+      [('m1', 2, 1), ('m2', 2, 2)],
+    );
+    // A mark file written by hand is in no round's placements: raised on no known round.
+    final m1 = store().mark('m1')!;
+    store().saveMark(
+      Mark(
+        id: 'm9',
+        frame: m1.frame,
+        anchor: m1.anchor,
+        pin: m1.pin,
+        note: 'n',
+        by: 'r',
+        at: m1.at,
+      ),
+    );
+    expect(
+      {for (final p in store().lastPlaced()) (p.mark.id, p.round, p.raisedIn)},
+      {('m1', 2, 1), ('m2', 2, 2), ('m9', null, null)},
+    );
   });
 
   test('a mark is only ever appended to', () async {

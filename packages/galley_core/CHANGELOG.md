@@ -4,6 +4,12 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.10 (unreleased)
+
+- `PlacedMark.raisedIn`: the round the mark was raised on, beside the round it was last placed
+  in. Null when no galley records it: a hand-written mark, or work items written before
+  0.3.10. Work items carry it as `raised_in`, read back as null when absent.
+
 ## 0.3.9 (unreleased)
 
 - `raiseTarget`: the widget a new mark pins in a round's frame, and where on it, or the refusal

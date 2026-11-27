@@ -4,6 +4,10 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.10 (unreleased)
+
+- `ServerGalley.marks` gives each mark's `raisedIn`: the round its row was raised on.
+
 ## 0.3.9 (unreleased)
 
 The first release of the package (DESIGN D15):

@@ -166,14 +166,21 @@ final class GalleyDirectory {
       for (final n in rounds().reversed)
         if (placements(n) case final p?) (n, p),
     ];
-    return [
-      for (final m in marks())
-        [
-              for (final (n, p) in placed)
-                if (p.of(m.id) case final c?) PlacedMark(n, c),
-            ].firstOrNull ??
-            PlacedMark(null, Carried.raised(m)),
-    ];
+    return [for (final m in marks()) _lastPlacedOf(m, placed)];
+  }
+
+  /// [m] in the newest of [placed] that places it, else as raised in none; with the round
+  /// whose placements hold it as Raised, which `raise` writes and no later round does. That
+  /// round is null when none does, as for a mark file written by hand.
+  static PlacedMark _lastPlacedOf(Mark m, List<(int, Placements)> placed) {
+    final raisedIn = [
+      for (final (n, p) in placed)
+        if (p.of(m.id)?.placement is Raised) n,
+    ].firstOrNull;
+    for (final (n, p) in placed) {
+      if (p.of(m.id) case final c?) return PlacedMark(n, c, raisedIn: raisedIn);
+    }
+    return PlacedMark(null, Carried.raised(m), raisedIn: raisedIn);
   }
 
   /// Writes [json] to [path] whole or not at all: a reader never sees half a file.

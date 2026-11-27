@@ -51,10 +51,11 @@ abstract interface class Galley {
   Future<Mark> record(String id, MarkEvent Function(DateTime at) event);
 }
 
-/// A mark where it was last placed: in [round], or in none when no round has placed it yet.
+/// A mark where it was last placed: in [round], or in none when no round has placed it yet;
+/// and the round it was raised on, [raisedIn].
 final class PlacedMark {
-  /// [carried] in [round].
-  const PlacedMark(this.round, this.carried);
+  /// [carried] in [round], raised on round [raisedIn].
+  const PlacedMark(this.round, this.carried, {required this.raisedIn});
 
   /// Reads one of [workItems]: the form `galley pull --json` prints and `galley serve` sends.
   factory PlacedMark.fromJson(Object? json, String context) {
@@ -66,11 +67,22 @@ final class PlacedMark {
         r.read('where', Placement.fromJson),
         r.read('anchor', Anchor.fromJson),
       ),
+      raisedIn: r.optionalInteger('raised_in'),
     );
   }
 
   /// The round it was last placed in, or null.
   final int? round;
+
+  /// The round it was raised on, or null when no galley records which: a mark file written by
+  /// hand, or work items printed before 0.3.10.
+  ///
+  /// A reviewer checks an answer against the frame they marked, so the canvas shows the mark's
+  /// widget in this round beside the latest. Required, with null as "not known", so that no
+  /// backend can leave it out by forgetting it. Rejected: reading it from the mark's time
+  /// against each round's, since the packer's clock and the server's need not agree; and a
+  /// field on [Mark], whose JSON every existing galley already wrote without it.
+  final int? raisedIn;
 
   /// The mark, its placement there, and its anchor.
   final Carried carried;
@@ -115,6 +127,7 @@ Future<JsonMap> _item(
     'id': p.mark.id,
     'status': p.mark.status.name,
     'round': n,
+    'raised_in': p.raisedIn,
     'placement': p.carried.placement.name,
     'where': p.carried.placement.toJson(),
     'anchor': p.carried.anchor.toJson(),

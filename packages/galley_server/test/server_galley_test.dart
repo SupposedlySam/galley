@@ -293,8 +293,8 @@ void main() {
       )).mark;
       // Not yet carried: Raised, in the round it was raised on.
       var placed = await owner.marks();
-      expect(placed.map((p) => (p.mark.id, p.round, p.carried.placement.name)), [
-        (m.id, 1, 'raised'),
+      expect(placed.map((p) => (p.mark.id, p.round, p.raisedIn, p.carried.placement.name)), [
+        (m.id, 1, 1, 'raised'),
       ]);
 
       // Round 2 carries it.
@@ -317,8 +317,8 @@ void main() {
       await rae.record(m.id, (at) => Reopened('still tight', by: 'Rae', at: at));
 
       placed = await rae.marks();
-      expect(placed.map((p) => (p.mark.id, p.round, p.carried.placement.name)), [
-        (m.id, 2, 'unplaced'),
+      expect(placed.map((p) => (p.mark.id, p.round, p.raisedIn, p.carried.placement.name)), [
+        (m.id, 2, 1, 'unplaced'),
       ]);
       expect(placed.single.mark.history.map((e) => (e.runtimeType, e.by)), [
         (Answered, 'Owner'),

@@ -67,15 +67,17 @@ void main() {
       at: at,
     ),
   ];
-  PlacedMark placed(int? round, Mark m) => PlacedMark(round, Carried.raised(m));
+  PlacedMark placed(int? round, Mark m, {required int? raisedIn}) =>
+      PlacedMark(round, Carried.raised(m), raisedIn: raisedIn);
 
   // m1 and m2 in round 2, on the frame with an image; m3 placed in no round; m4 in round 1, on
-  // the frame without one. m2 is answered, so it waits on a reviewer, not on an answer.
+  // the frame without one. m2 is answered, so it waits on a reviewer, not on an answer. m1 was
+  // raised on round 1, so where it was raised is not where it was last placed.
   List<PlacedMark> population() => [
-    placed(2, markOn('m1', MemoryGalley.a)),
-    placed(2, markOn('m2', MemoryGalley.a, history: answered)),
-    placed(null, markOn('m3', MemoryGalley.a)),
-    placed(1, markOn('m4', MemoryGalley.b)),
+    placed(2, markOn('m1', MemoryGalley.a), raisedIn: 1),
+    placed(2, markOn('m2', MemoryGalley.a, history: answered), raisedIn: 2),
+    placed(null, markOn('m3', MemoryGalley.a), raisedIn: null),
+    placed(1, markOn('m4', MemoryGalley.b), raisedIn: 1),
   ];
 
   group('workItems', () {
@@ -122,18 +124,22 @@ void main() {
       final items = await workItems(MemoryGalley(population()), all: true);
       final back = [for (final (i, item) in items.indexed) PlacedMark.fromJson(item, 'item $i')];
       expect(
-        [for (final p in back) (p.round, p.mark.id, p.mark.status, p.carried.placement.name)],
         [
-          (2, 'm1', MarkStatus.open, 'raised'),
-          (2, 'm2', MarkStatus.answered, 'raised'),
-          (null, 'm3', MarkStatus.open, 'raised'),
-          (1, 'm4', MarkStatus.open, 'raised'),
+          for (final p in back)
+            (p.round, p.raisedIn, p.mark.id, p.mark.status, p.carried.placement.name),
+        ],
+        [
+          (2, 1, 'm1', MarkStatus.open, 'raised'),
+          (2, 2, 'm2', MarkStatus.answered, 'raised'),
+          (null, null, 'm3', MarkStatus.open, 'raised'),
+          (1, 1, 'm4', MarkStatus.open, 'raised'),
         ],
       );
       expect(items.first.keys, [
         'id',
         'status',
         'round',
+        'raised_in',
         'placement',
         'where',
         'anchor',
@@ -141,5 +147,12 @@ void main() {
         'mark',
       ]);
     });
+  });
+
+  test('PlacedMark.fromJson reads work items printed before raised_in as raised on no known '
+      'round', () async {
+    final item = (await workItems(MemoryGalley(population()))).first..remove('raised_in');
+    final back = PlacedMark.fromJson(item, 'item');
+    expect((back.round, back.raisedIn, back.mark.id), (2, null, 'm1'));
   });
 }

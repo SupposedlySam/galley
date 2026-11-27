@@ -42,6 +42,6 @@ in its place.
 `pull --json` is for an agent working through the marks:
 
 ```json
-{"latest_round": 2, "items": [{"id": "m3f…", "status": "open", "round": 2, "placement": "moved",
-  "where": {…}, "anchor": {…}, "image": "/abs/path/frames/….png", "mark": {…}}]}
+{"latest_round": 2, "items": [{"id": "m3f…", "status": "open", "round": 2, "raised_in": 1,
+  "placement": "moved", "where": {…}, "anchor": {…}, "image": "/abs/path/frames/….png", "mark": {…}}]}
 ```
