@@ -52,22 +52,13 @@ final class LocalGalley {
     if (tree == null) {
       throw Refused.conflict('frame $frame in round $n has no tree to pin a widget of');
     }
-    final (node, pin) = switch (target) {
-      AtPoint(:final x, :final y) => switch (tree.deepestAt(x, y)) {
-        final node? => (node, PinOffset.within(node.rect, x, y)),
-        null => (null, null),
-      },
-      AtNode(:final path, :final at) => switch ((tree.at(path), at)) {
-        (final node?, null) => (node, const PinOffset(0.5, 0.5)),
-        (final node?, (:final x, :final y)) when _inside(node.rect, x, y) => (
-          node,
-          PinOffset.within(node.rect, x, y),
-        ),
-        (final node?, _) => throw Refused.invalid('$target is outside ${node.type}'),
-        (null, _) => (null, null),
-      },
-    };
-    if (node == null || pin == null) throw Refused.invalid('no widget at $target in frame $frame');
+    final WidgetNode node;
+    final PinOffset pin;
+    try {
+      (:node, :pin) = target.resolve(tree);
+    } on PinMissed catch (e) {
+      throw Refused.invalid('${e.message} in frame $frame');
+    }
     if (note.trim().isEmpty) throw const Refused.invalid('a mark says what is wrong');
     if (by.trim().isEmpty) throw const Refused.invalid('a mark says who raised it');
 
@@ -103,10 +94,6 @@ final class LocalGalley {
     directory.saveMark(next);
     return next;
   }
-
-  /// Whether ([x], [y]) is in [r], edges included: a pin on a widget's edge is on the widget.
-  static bool _inside(LogicalRect r, double x, double y) =>
-      x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 
   /// [path] made absolute with no `.` or `..` in it. `--app` defaults to `.`, and an agent
   /// handed `app/./.galley/...` has a path that works and reads as a mistake.
@@ -168,47 +155,4 @@ final class LocalGalley {
       'mark': carried.mark.toJson(),
     };
   }
-}
-
-/// Where a new mark is pinned: a point in the frame, or a widget by its index path.
-sealed class PinTarget {
-  const PinTarget();
-}
-
-/// The deepest widget at ([x], [y]) in logical pixels, pinned at that point within it.
-final class AtPoint extends PinTarget {
-  /// The point ([x], [y]).
-  const AtPoint(this.x, this.y);
-
-  /// Logical pixels from the frame's left.
-  final double x;
-
-  /// Logical pixels from the frame's top.
-  final double y;
-
-  @override
-  String toString() => '$x,$y';
-}
-
-/// The widget at index [path] in the frame's tree, pinned at [at] inside it, or at its centre.
-///
-/// The canvas sends both: the reviewer clicks a point and then picks the widget, the deepest one
-/// there or one of its ancestors. Rejected: sending only the point, which can name only the
-/// deepest widget, so "the card" could never be marked by clicking its label.
-final class AtNode extends PinTarget {
-  /// The widget at [path], pinned at [at] (logical pixels in the frame), or at its centre.
-  const AtNode(this.path, {this.at});
-
-  /// Child indexes from the root.
-  final List<int> path;
-
-  /// Where in the frame the pin was dropped, or null for the widget's centre. It must be
-  /// inside the widget.
-  final ({double x, double y})? at;
-
-  @override
-  String toString() => switch (at) {
-    null => path.join('.'),
-    (:final x, :final y) => '${path.join('.')} at $x,$y',
-  };
 }

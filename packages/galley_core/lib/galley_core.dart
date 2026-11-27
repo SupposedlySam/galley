@@ -10,6 +10,7 @@ export 'src/frame_tree.dart';
 export 'src/geometry.dart';
 export 'src/json.dart' show JsonMap, JsonReader;
 export 'src/mark.dart';
+export 'src/pin.dart';
 export 'src/plan.dart';
 export 'src/provenance.dart';
 export 'src/reanchor.dart';

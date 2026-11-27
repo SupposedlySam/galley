@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:galley_cli/galley_cli.dart';
+import 'package:galley_core/galley_core.dart';
 import 'package:test/test.dart';
 
 import 'support/round.dart';
@@ -63,7 +64,7 @@ void main() {
         throwsA(
           isA<Refused>()
               .having((r) => r.kind, 'kind', RefusalKind.invalid)
-              .having((r) => r.message, 'message', '0 at $x,$y is outside Card'),
+              .having((r) => r.message, 'message', '0 at $x,$y is outside Card in frame $drawn'),
         ),
       );
     }
