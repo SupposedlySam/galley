@@ -70,6 +70,9 @@ final class FakeServer {
   /// How many file reads were sent.
   var fileReads = 0;
 
+  /// Collections whose list is answered 401, as a server does once a token has run out.
+  final signedOut = <String>{};
+
   var _ids = 0;
   String _id(String prefix) => '$prefix${++_ids}';
   static const created = '2026-11-27 14:34:47.123Z';
@@ -112,6 +115,12 @@ final class FakeServer {
     final s = request.url.pathSegments;
     http.Response ok(Object? body) => http.Response(jsonEncode(body), 200);
     if (s case ['api', 'collections', final c, 'records'] when request.method == 'GET') {
+      if (signedOut.contains(c)) {
+        return http.Response(
+          jsonEncode({'message': 'The request requires valid record authorization token.'}),
+          401,
+        );
+      }
       (filters[c] ??= []).add(request.url.queryParameters['filter']);
       return ok({'items': _collection(c)});
     }
@@ -307,6 +316,26 @@ void main() {
       expect(fake.filters['marks'], everyElement('round.galley = "g1"'));
       expect(fake.filters['events']!.where((f) => f == 'mark.round.galley = "g1"'), hasLength(2));
       expect(fake.filters['members'], everyElement('galley = "g1"'));
+    });
+
+    test('a list the server refuses is that refusal, whichever of the four it is', () async {
+      fake.addRound(1, roundFiles());
+      for (final c in ['members', 'rounds', 'marks', 'events']) {
+        fake.signedOut
+          ..clear()
+          ..add(c);
+        await expectLater(
+          as('u1', 'owner@x.test').marks(),
+          throwsA(
+            isA<Refused>()
+                .having((r) => r.kind, 'kind', RefusalKind.environment)
+                .having((r) => r.message, 'message', contains('sign in again')),
+          ),
+          reason: c,
+        );
+      }
+      fake.signedOut.clear();
+      expect(await as('u1', 'owner@x.test').marks(), isEmpty, reason: 'the control');
     });
 
     test('a mark by someone who is not a member is damage, not a mark by nobody', () async {

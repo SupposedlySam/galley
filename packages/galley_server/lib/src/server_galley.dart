@@ -141,9 +141,9 @@ final class ServerGalley implements Galley {
   /// The server numbers the event and takes its author and time; [event] is built with this
   /// machine's clock only to be sent.
   ///
-  /// Not retried: of two events sent to one mark at once, the server refuses the second
-  /// (`idx_events_mark_seq`), and sending it again would be judged against the first, which
-  /// is the answer the user should see.
+  /// Not retried: of two events sent to one mark at once, the server judges the second against
+  /// a history that holds the first (its writes are one transaction at a time), so a refusal
+  /// is the answer the user should see, and sending it again would only be refused again.
   @override
   Future<Mark> record(String id, MarkEvent Function(DateTime at) event) async {
     final e = event(_now().toUtc());
@@ -205,22 +205,35 @@ final class ServerGalley implements Galley {
   /// Every mark of the galley with its events, and the finished rounds.
   Future<({Map<String, _MarkRows> marks, List<_RoundRecord> rounds})> _everything() async {
     final galley = _quoted(galleyId);
-    final (aliases, finished, marks, events) = await (
-      _aliases(),
-      _finishedRounds(),
-      server.list('marks', filter: 'round.galley = $galley', token: _token),
-      server.list('events', filter: 'mark.round.galley = $galley', sort: 'mark,seq', token: _token),
-    ).wait;
-    final eventsOf = <String, List<JsonMap>>{};
+    final aliasesOf = _aliases();
+    final finishedOf = _finishedRounds();
+    final marksOf = server.list('marks', filter: 'round.galley = $galley', token: _token);
+    final eventsOf = server.list(
+      'events',
+      filter: 'mark.round.galley = $galley',
+      sort: 'mark,seq',
+      token: _token,
+    );
+    // The four at once, through Future.wait: the record's `.wait` would hand a refusal on as a
+    // ParallelWaitError, which nothing upstream reads (measured: a 401 on any one list did).
+    // Future.wait throws the first error as it is and handles the rest.
+    await Future.wait([aliasesOf, finishedOf, marksOf, eventsOf]);
+    final (aliases, finished, marks, events) = (
+      await aliasesOf,
+      await finishedOf,
+      await marksOf,
+      await eventsOf,
+    );
+    final eventsByMark = <String, List<JsonMap>>{};
     for (final e in events) {
-      (eventsOf[JsonReader(e, 'an event').string('mark')] ??= []).add(e);
+      (eventsByMark[JsonReader(e, 'an event').string('mark')] ??= []).add(e);
     }
     final numberOf = {for (final r in finished) r.id: r.number};
     return (
       marks: {
         for (final row in marks)
           JsonReader(row, 'a mark').string('id'): _MarkRows(
-            _markOf(row, eventsOf[row['id']] ?? const [], aliases),
+            _markOf(row, eventsByMark[row['id']] ?? const [], aliases),
             numberOf[row['round']],
           ),
       },
