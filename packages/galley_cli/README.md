@@ -12,6 +12,7 @@ dart run galley_cli:galley answer <mark> fixed --commit <sha> [--note '...'] [--
 dart run galley_cli:galley answer <mark> wont-fix|question --note '...' [--by me]
 dart run galley_cli:galley verify <mark> [--by me]
 dart run galley_cli:galley reopen <mark> --note '...' [--by me]
+dart run galley_cli:galley serve [--port 7340] [--web <dir>]
 ```
 
 Global options: `--app` (the app's root, default `.`) and `--galley` (default `<app>/.galley`).
@@ -20,6 +21,12 @@ Global options: `--app` (the app's root, default `.`) and `--galley` (default `<
 
 Keep `.galley/` out of git (or commit it). An untracked galley makes every later round look as
 if the app's tree had uncommitted changes (DESIGN D11).
+
+`serve` serves the galley over HTTP on loopback until Ctrl-C (DESIGN D13): `GET /api/galley`,
+`GET /api/marks` (what `pull --json --all` lists, with each image as a URL), `GET
+/api/rounds/<n>/<file>`, `POST /api/marks` and `POST /api/marks/<id>/events`. A POST is
+`application/json`, and a request whose Host is not `localhost` or `127.0.0.1` is refused.
+`--web <dir>` serves a built canvas at `/`.
 
 `pull --json` is for an agent working through the marks:
 

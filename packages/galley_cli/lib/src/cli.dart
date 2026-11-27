@@ -7,6 +7,7 @@ import 'package:args/command_runner.dart';
 import 'package:galley_core/galley_core.dart';
 
 import 'galley_directory.dart';
+import 'galley_server.dart';
 import 'local_galley.dart';
 import 'renderer.dart';
 
@@ -20,12 +21,14 @@ final class GalleyContext {
     String Function()? newId,
     MakeRenderer? renderer,
     Map<String, String>? environment,
+    Future<void> Function()? untilStopped,
   }) : out = out ?? stdout,
        err = err ?? stderr,
        now = now ?? DateTime.now,
        newId = newId ?? _randomId,
        renderer = renderer ?? FlutterTestRenderer.new,
-       environment = environment ?? Platform.environment;
+       environment = environment ?? Platform.environment,
+       untilStopped = untilStopped ?? _untilSignalled;
 
   /// Where results go.
   final StringSink out;
@@ -44,6 +47,14 @@ final class GalleyContext {
 
   /// Read for `GALLEY_BY`.
   final Map<String, String> environment;
+
+  /// Completes when `serve` should stop: on Ctrl-C, or on SIGTERM where there is one.
+  final Future<void> Function() untilStopped;
+
+  static Future<void> _untilSignalled() => Future.any([
+    ProcessSignal.sigint.watch().first,
+    if (!Platform.isWindows) ProcessSignal.sigterm.watch().first,
+  ]);
 
   /// 48 random bits as hex: unique enough for one galley's marks, short enough to type.
   /// Rejected: a counter. Two people marking the same galley offline would both make `m3`.
@@ -64,7 +75,8 @@ Future<int> runGalley(List<String> args, [GalleyContext? context]) async {
     ..addCommand(_Pull(c))
     ..addCommand(_AnswerCommand(c))
     ..addCommand(_Verify(c))
-    ..addCommand(_Reopen(c));
+    ..addCommand(_Reopen(c))
+    ..addCommand(_Serve(c));
   try {
     return await runner.run(args) ?? 0;
   } on UsageException catch (e) {
@@ -125,7 +137,7 @@ abstract class _GalleyCommand extends Command<int> {
 
   String? get note => _args.option('note');
 
-  LocalGalley get local => LocalGalley(galley, now: c.now, newId: c.newId);
+  LocalGalley get local => LocalGalley(galley, repository: app, now: c.now, newId: c.newId);
 
   /// The one positional argument: a mark's id.
   String get markArg {
@@ -345,7 +357,7 @@ final class _AnswerCommand extends _GalleyCommand {
     final Answer answer;
     try {
       answer = switch (rest[1]) {
-        'fixed' => Answer.fixed(commit: _commit(), note: note),
+        'fixed' => Answer.fixed(commit: local.fullCommit(_commit()), note: note),
         'wont-fix' => Answer.wontFix(note: note ?? ''),
         'question' => Answer.question(note: note ?? ''),
         final other => throw UsageException('"$other" is not fixed, wont-fix or question', usage),
@@ -356,22 +368,8 @@ final class _AnswerCommand extends _GalleyCommand {
     return record(id, (at) => Answered(answer, by: by, at: at));
   }
 
-  /// The full SHA of `--commit`, which must be a commit in the app's repository.
-  ///
-  /// Stored in full: a short SHA that is unique today can be ambiguous next year. Checked,
-  /// because "fixed in a commit that does not exist" cannot be verified by anyone.
-  String _commit() {
-    final given = _args.option('commit');
-    if (given == null) throw UsageException('fixed needs --commit <sha>', usage);
-    final r = Process.runSync('git', [
-      'rev-parse',
-      '--verify',
-      '--quiet',
-      '$given^{commit}',
-    ], workingDirectory: app);
-    if (r.exitCode != 0) throw Refused('$given is not a commit in the repository at $app');
-    return '${r.stdout}'.trim();
-  }
+  String _commit() =>
+      _args.option('commit') ?? (throw UsageException('fixed needs --commit <sha>', usage));
 }
 
 final class _Verify extends _GalleyCommand {
@@ -410,5 +408,52 @@ final class _Reopen extends _GalleyCommand {
   @override
   Future<int> run() async {
     return record(markArg, (at) => Reopened(note ?? '', by: by, at: at));
+  }
+}
+
+final class _Serve extends _GalleyCommand {
+  _Serve(super.c) {
+    argParser
+      ..addOption(
+        'port',
+        defaultsTo: '$defaultPort',
+        help: 'The loopback port. 0 picks a free one.',
+        valueHelp: 'n',
+      )
+      ..addOption('web', help: 'The built canvas to serve at /.', valueHelp: 'dir');
+  }
+
+  /// Fixed, so the canvas's address is the same every time and can be bookmarked. Rejected:
+  /// a free port by default. Every run would print a new address to open.
+  static const defaultPort = 7340;
+
+  @override
+  String get name => 'serve';
+
+  @override
+  String get description =>
+      'Serve the galley on this machine for the canvas: its rounds, its marks, and new marks '
+      'and events. Loopback only. Stops on Ctrl-C.';
+
+  @override
+  Future<int> run() async {
+    final port = int.tryParse(_args.option('port')!);
+    if (port == null || port < 0 || port > 65535) {
+      throw UsageException('--port is 0 to 65535', usage);
+    }
+    final web = _args.option('web');
+    if (web != null && !File('$web/index.html').existsSync()) {
+      throw Refused('$web has no index.html: give the canvas\'s build directory');
+    }
+    final GalleyServer server;
+    try {
+      server = await GalleyServer.start(local, port: port, web: web);
+    } on SocketException catch (e) {
+      throw Refused('could not listen on port $port (${e.osError?.message ?? e.message})');
+    }
+    c.out.writeln('Serving ${galley.path} at ${server.url}  (Ctrl-C stops it)');
+    await c.untilStopped();
+    await server.close();
+    return 0;
   }
 }

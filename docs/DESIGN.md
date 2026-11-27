@@ -240,7 +240,7 @@ GitHub repo. Before pub.dev, an app pins a tag:
 ```yaml
 dev_dependencies:
   galley:
-    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.4}
+    git: {url: https://github.com/SupposedlySam/galley, path: packages/galley, ref: v0.3.5}
 ```
 
 - **Why not a path dependency:** CI and fresh clones have no sibling checkout, so `pub get`
@@ -397,3 +397,50 @@ the round that last placed it. `mark`, `pull`, `answer`, `verify` and `reopen` w
   the CLI and the galley directory, are killed. One test packs the galley package's toy round
   twice with the real `flutter test`. Not tested: a write killed between the temp file and
   its rename.
+
+## D13 · `galley serve` is the canvas's backend on one machine (2026-11-26)
+
+`galley serve` serves a local galley over HTTP on loopback
+(`galley_cli/lib/src/galley_server.dart`). The canvas reads rounds and marks from it, and
+raises marks and records events through it. Every write goes through `LocalGalley`, the same
+service the commands use, so a mark raised in the browser is checked and stored exactly like
+one raised with `galley mark`. Rejected: a second implementation of raise and record for the
+server. The two would drift on what they refuse.
+
+```
+GET  /api/galley                rounds, latest_round
+GET  /api/marks                 every mark as a work item; image is a URL under /api/rounds
+GET  /api/rounds/<n>/<path>     a file of a finished round
+POST /api/marks                 frame, node | at, note, by       -> 201 mark, status, node, round
+POST /api/marks/<id>/events     a MarkEvent's JSON, without at   -> 200 mark, status
+GET  /<path>                    the built canvas, from --web
+```
+
+- **It is for one machine.** It binds loopback only. The outside reviewers are served by the
+  server of D7, not by this one.
+- **The Host must be loopback at its own port.** A page on another site can rebind its name
+  to 127.0.0.1 and reach the socket (DNS rebinding), but it still sends its own name as the
+  Host, and that is refused with 403.
+- **A POST must be `application/json`.** A page on another origin cannot send that without a
+  CORS preflight, and the server answers no preflight, so another site cannot write marks.
+  Rejected: a token in the URL. It protects against the same two attacks, and it ends up in
+  shell history and screenshots.
+- **Who acts is whoever the request names (`by`)**, as it is for the commands. Anyone who can
+  reach this socket can already write the galley's files.
+- **An event's time is the server's.** A client's `at` is replaced. A history ordered by
+  clocks the reviewers set is not an order. A fix's commit is resolved to its full SHA in the
+  app's repository, as `answer fixed` does.
+- **One rule keeps file reads inside a round or the canvas:** the resolved path, with `..`
+  and symlinks resolved, must be under the resolved root. A round that did not finish (no
+  `index.json`) serves nothing. Rejected: also refusing `..` and encoded separators one segment
+  at a time. Mutation found no request that check refused and the root rule let through.
+- **A refusal is 409.** A malformed request is 400, a wrong content type 415, a body over 1 MB
+  413, a wrong method 405, and anything not found 404. An oversized body is read to the end
+  and dropped before the answer is sent. Answering early resets the connection, and the
+  client sees a broken pipe instead of a 413.
+- **The port defaults to 7340**, so the canvas's address can be bookmarked. Rejected: a free
+  port each run, which would print a new address every time.
+- *Mutation, 2026-11-26:* 20 mutants of the server were run, and every one left in the code
+  is killed. The two that survived were the per-segment checks, and they were removed (see
+  above). Not decided yet: how the built canvas ships to an app that adopts Galley by git tag.
+  That comes with the canvas.

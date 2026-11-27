@@ -8,11 +8,15 @@ import 'galley_directory.dart';
 /// list them as work items. The `galley` commands and `galley serve` both call this, so a mark
 /// raised from the canvas is the same as one raised from the command line.
 final class LocalGalley {
-  /// The galley in [directory], with [now] for event times and [newId] for new marks.
-  LocalGalley(this.directory, {required this.now, required this.newId});
+  /// The galley in [directory] of the app whose git repository is at [repository], with [now]
+  /// for event times and [newId] for new marks.
+  LocalGalley(this.directory, {required this.repository, required this.now, required this.newId});
 
   /// Where the galley is kept.
   final GalleyDirectory directory;
+
+  /// The app's git repository, where a fix's commit must be.
+  final String repository;
 
   /// The time an event is recorded at.
   final DateTime Function() now;
@@ -90,6 +94,21 @@ final class LocalGalley {
   /// handed `app/./.galley/...` has a path that works and reads as a mistake.
   static String _absolute(String path) => File(path).absolute.uri.normalizePath().toFilePath();
 
+  /// The full SHA of [given], which must be a commit in [repository].
+  ///
+  /// Stored in full: a short SHA that is unique today can be ambiguous next year. Checked,
+  /// because "fixed in a commit that does not exist" cannot be verified by anyone.
+  String fullCommit(String given) {
+    final r = Process.runSync('git', [
+      'rev-parse',
+      '--verify',
+      '--quiet',
+      '$given^{commit}',
+    ], workingDirectory: repository);
+    if (r.exitCode != 0) throw Refused('$given is not a commit in the repository at $repository');
+    return '${r.stdout}'.trim();
+  }
+
   static String _verb(MarkEvent e) => switch (e) {
     Answered() => 'answered',
     Verified() => 'verified',
@@ -99,17 +118,29 @@ final class LocalGalley {
   /// Every mark waiting on an answer (every mark, with [all]), where it was last placed, as the
   /// JSON `pull --json` prints and `galley serve` returns.
   ///
-  /// `image` is an absolute path to the frame's PNG in the round the mark was last placed in,
-  /// or null when that round is unknown or the frame has no image.
-  Future<List<JsonMap>> workItems({bool all = false}) async {
+  /// `image` names the frame's PNG in the round the mark was last placed in, or is null when
+  /// that round is unknown or the frame has no image. [imageAt] makes the name from the round
+  /// and the image's path in it: an absolute path by default, for an agent on this machine,
+  /// and a URL for `galley serve`.
+  Future<List<JsonMap>> workItems({
+    bool all = false,
+    String Function(int round, String image)? imageAt,
+  }) async {
     final rounds = <int, StoredRound>{};
+    final name = imageAt ?? (n, image) => _absolute('${directory.roundPath(n)}/$image');
     return [
       for (final p in directory.lastPlaced())
-        if (all || p.carried.mark.status.awaitsAnswer) await _item(p.round, p.carried, rounds),
+        if (all || p.carried.mark.status.awaitsAnswer)
+          await _item(p.round, p.carried, rounds, name),
     ];
   }
 
-  Future<JsonMap> _item(int? n, Carried carried, Map<int, StoredRound> rounds) async {
+  Future<JsonMap> _item(
+    int? n,
+    Carried carried,
+    Map<int, StoredRound> rounds,
+    String Function(int, String) name,
+  ) async {
     final stored = n == null ? null : rounds[n] ??= await directory.readRound(n);
     final image = stored?.round.frame(carried.mark.frame)?.record.image;
     return {
@@ -119,7 +150,7 @@ final class LocalGalley {
       'placement': placementName(carried.placement),
       'where': carried.placement.toJson(),
       'anchor': carried.anchor.toJson(),
-      'image': image == null ? null : _absolute('${directory.roundPath(n!)}/$image'),
+      'image': image == null ? null : name(n!, image),
       'mark': carried.mark.toJson(),
     };
   }
