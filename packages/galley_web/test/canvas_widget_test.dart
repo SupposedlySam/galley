@@ -19,7 +19,7 @@ final _home = _keys.first;
 /// The canvas over [api], as [reviewer], in a [window] of 1600 × 1000 unless said, loaded.
 Future<CanvasModel> pumpCanvas(
   WidgetTester tester,
-  FakeGalleyApi api, {
+  FakeGalley api, {
   String reviewer = 'Owner',
   Size window = const Size(1600, 1000),
 }) async {
@@ -34,8 +34,8 @@ Future<CanvasModel> pumpCanvas(
   return model;
 }
 
-FakeGalleyApi apiOf([List<Mark> marks = const []]) {
-  final api = FakeGalleyApi(files: roundFiles(_keys));
+FakeGalley apiOf([List<Mark> marks = const []]) {
+  final api = FakeGalley(files: roundFiles(_keys));
   for (final m in marks) {
     api.seed(m);
   }
@@ -226,7 +226,7 @@ void main() {
   });
 
   group('a thread', () {
-    Future<FakeGalleyApi> openThread(WidgetTester tester, Mark mark, {String as = 'Owner'}) async {
+    Future<FakeGalley> openThread(WidgetTester tester, Mark mark, {String as = 'Owner'}) async {
       final api = apiOf([mark]);
       await pumpCanvas(tester, api, reviewer: as);
       await tester.tap(find.text(mark.note));

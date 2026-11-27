@@ -1,7 +1,6 @@
 import 'package:galley_core/galley_core.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'api.dart';
 import 'board.dart';
 
 /// What the canvas shows, and what a reviewer does on it, apart from how it is drawn.
@@ -17,7 +16,7 @@ final class CanvasModel extends ChangeNotifier {
       _now = now ?? DateTime.now;
 
   /// Where rounds and marks come from.
-  final GalleyApi api;
+  final Galley api;
 
   final DateTime Function() _now;
 
@@ -57,16 +56,16 @@ final class CanvasModel extends ChangeNotifier {
     try {
       final rounds = await api.rounds();
       if (rounds.isEmpty) {
-        _state = const Refused('This galley has no rounds yet. Run `galley pack` in the app.');
+        _state = const Unavailable('This galley has no rounds yet. Run `galley pack` in the app.');
       } else {
         final n = rounds.last;
         final round = await api.round(n);
         _state = Shown(n, round, Board.of(round.frames), await api.marks());
       }
-    } on GalleyRefusal catch (e) {
-      _state = Refused(e.message);
+    } on Refused catch (e) {
+      _state = Unavailable(e.message);
     } on FormatException catch (e) {
-      _state = Refused('The galley sent something the canvas cannot read: ${e.message}');
+      _state = Unavailable('The galley sent something the canvas cannot read: ${e.message}');
     }
     notifyListeners();
   }
@@ -79,30 +78,31 @@ final class CanvasModel extends ChangeNotifier {
     required ({double x, double y}) at,
     required String note,
   }) => _act(() async {
-    final mark = await api.raise(
+    final raised = await api.raise(
       frame: frame,
-      node: node.indexPath,
-      at: at,
+      target: AtNode(node.indexPath, at: at),
       note: note,
       by: _reviewer,
     );
-    _selected = mark.id;
+    _selected = raised.mark.id;
   });
 
-  /// Records [event] on [mark]. Returns why not, or null when it was recorded.
-  Future<String?> record(Mark mark, MarkEvent event) => _act(() async {
-    final json = event.toJson()..remove('at');
-    await api.record(mark.id, json);
-  });
+  /// Records the event [event] builds on [mark]. Returns why not, or null when it was
+  /// recorded. The galley gives the time ([Galley.record]).
+  Future<String?> record(Mark mark, MarkEvent Function(DateTime at) event) =>
+      _act(() => api.record(mark.id, event));
 
-  /// Verified by the reviewer, now: what [record] takes for "looks right".
-  MarkEvent verified() => Verified(by: _reviewer, at: _now().toUtc());
+  /// Verified by the reviewer: what [record] takes for "looks right".
+  MarkEvent Function(DateTime at) verified() =>
+      (at) => Verified(by: _reviewer, at: at);
 
-  /// Reopened by the reviewer, now, saying [note].
-  MarkEvent reopened(String note) => Reopened(note, by: _reviewer, at: _now().toUtc());
+  /// Reopened by the reviewer, saying [note].
+  MarkEvent Function(DateTime at) reopened(String note) =>
+      (at) => Reopened(note, by: _reviewer, at: at);
 
-  /// Withdrawn by the reviewer, now, saying [note].
-  MarkEvent withdrawn(String note) => Withdrawn(note, by: _reviewer, at: _now().toUtc());
+  /// Withdrawn by the reviewer, saying [note].
+  MarkEvent Function(DateTime at) withdrawn(String note) =>
+      (at) => Withdrawn(note, by: _reviewer, at: at);
 
   /// Whether the reviewer may [review] [mark] now, by the core's own rule ([MarkEvent.apply]),
   /// which the backend checks again: so a button the canvas offers is one the backend takes.
@@ -118,7 +118,7 @@ final class CanvasModel extends ChangeNotifier {
       Review.verify => verified(),
       Review.reopen => reopened(note),
       Review.withdraw => withdrawn(note),
-    };
+    }(_now().toUtc());
     return event.apply(mark.status, raisedBy: mark.by) != null;
   }
 
@@ -128,7 +128,7 @@ final class CanvasModel extends ChangeNotifier {
     }
     try {
       await action();
-    } on GalleyRefusal catch (e) {
+    } on Refused catch (e) {
       return e.message;
     } on ArgumentError catch (e) {
       return '${e.message}';
@@ -141,8 +141,8 @@ final class CanvasModel extends ChangeNotifier {
     if (_state case final Shown s) {
       try {
         _state = s.withMarks(await api.marks());
-      } on GalleyRefusal catch (e) {
-        _state = Refused(e.message);
+      } on Refused catch (e) {
+        _state = Unavailable(e.message);
       }
       notifyListeners();
     }
@@ -173,10 +173,10 @@ final class Loading extends CanvasState {
   const Loading();
 }
 
-/// Nothing can be shown, and [message] says why.
-final class Refused extends CanvasState {
-  /// Refused for [message].
-  const Refused(this.message);
+/// Nothing can be shown, and [message] says why: the galley refused, or sent what does not read.
+final class Unavailable extends CanvasState {
+  /// Unavailable, because of [message].
+  const Unavailable(this.message);
 
   /// Why.
   final String message;

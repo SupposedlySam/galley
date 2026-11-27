@@ -1,5 +1,10 @@
-/// What was asked cannot be done, and [message] says why. The CLI prints it and exits 1; the
-/// server answers with the status its [kind] names.
+/// What was asked cannot be done, and [message] says why. The CLI prints it and exits 1; a
+/// server answers with its [kind]'s [RefusalKind.status], and a client reads it back with
+/// [Refused.ofStatus].
+///
+/// In the core because every [Galley] throws it: the local one, `galley serve`'s client and the
+/// server's. Rejected: a refusal type per layer, which the canvas had (`GalleyRefusal`, a bare
+/// status): each caller then mapped numbers to meanings again.
 ///
 /// Every refusal names its kind. Rejected: one kind for all, which is what 0.3.5 had. Its
 /// server answered 409 to a blank note, and a client could not tell "fix your input" from "the
@@ -24,6 +29,18 @@ final class Refused implements Exception {
   /// request sends can fix it, so the server answers 500, not 400.
   const Refused.damaged(this.message) : kind = RefusalKind.damaged;
 
+  /// A refusal a server answered with [status], in its words: the [RefusalKind] whose status it
+  /// is, a malformed request (400) as invalid, and anything else (a proxy's 502, a 403) as the
+  /// environment. Rejected: a status nobody sends taken as damaged, which tells the reader to
+  /// fix a galley that is fine.
+  factory Refused.ofStatus(int status, String message) => switch (status) {
+    400 || 422 => Refused.invalid(message),
+    404 => Refused.missing(message),
+    409 => Refused.conflict(message),
+    500 => Refused.damaged(message),
+    _ => Refused.environment(message),
+  };
+
   /// Why.
   final String message;
 
@@ -34,20 +51,25 @@ final class Refused implements Exception {
   String toString() => 'Refused: $message';
 }
 
-/// The kinds of [Refused], as the server tells them apart.
+/// The kinds of [Refused], as a server tells them apart.
 enum RefusalKind {
   /// See [Refused.invalid].
-  invalid,
+  invalid(422),
 
   /// See [Refused.missing].
-  missing,
+  missing(404),
 
   /// See [Refused.conflict].
-  conflict,
+  conflict(409),
 
   /// See [Refused.environment].
-  environment,
+  environment(500),
 
   /// See [Refused.damaged].
-  damaged,
+  damaged(500);
+
+  const RefusalKind(this.status);
+
+  /// The HTTP status a server answers it with.
+  final int status;
 }

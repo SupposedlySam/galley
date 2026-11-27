@@ -5,7 +5,6 @@ import 'package:galley_core/galley_core.dart';
 
 import 'canvas.dart';
 import 'local_galley.dart';
-import 'refused.dart';
 
 /// A local galley over HTTP, for the canvas: its rounds as files, its marks as work items, and
 /// a mark raised or an event recorded through the same [LocalGalley] the commands use.
@@ -137,33 +136,14 @@ final class GalleyServer {
       case ['marks'] when get:
         _json(request.response, 200, {
           'latest_round': _local.directory.rounds().lastOrNull,
-          'items': await _local.workItems(all: true, imageAt: _roundUrl),
+          'items': await workItems(_local, all: true, imageAt: _roundUrl),
         });
       case ['marks'] when post:
         final json = await _object(request);
         final body = JsonReader(json, 'request');
-        final target = switch ((json['node'], json['at'])) {
-          (List<Object?>(), null) => AtNode(body.integers('node')),
-          (List<Object?>(), [final num x, final num y]) => AtNode(
-            body.integers('node'),
-            at: (x: x.toDouble(), y: y.toDouble()),
-          ),
-          (null, [final num x, final num y]) => AtPoint(x.toDouble(), y.toDouble()),
-          // A mark's `pin` comes back as {"dx", "dy"}, and the first adopting app sent that as
-          // "at". Said, not accepted: a pin is a fraction of its widget, which the server works
-          // out from where in the frame the click was. Rejected: taking either shape, two ways to
-          // say one thing, one of which cannot be checked against the widget's box.
-          (_, Map<String, Object?>()) => throw const FormatException(
-            'request.at: [x, y] in the frame\'s logical pixels, not a pin\'s {"dx", "dy"}: the '
-            'pin, a fraction of the widget, is worked out from it',
-          ),
-          _ => throw const FormatException(
-            'request: give "node": [0, 1], "at": [x, y], or both (the widget, and where in it)',
-          ),
-        };
         final raised = await _local.raise(
           frame: _frame(json['frame']),
-          target: target,
+          target: PinTarget.fromJson(json, 'request'),
           note: body.string('note'),
           by: body.string('by'),
         );
@@ -175,7 +155,10 @@ final class GalleyServer {
         });
       case ['marks', final id, 'events'] when post:
         final event = await _object(request);
-        final mark = _local.record(id, (at) => MarkEvent.fromJson(_stamped(event, at), 'request'));
+        final mark = await _local.record(
+          id,
+          (at) => MarkEvent.fromJson(_stamped(event, at), 'request'),
+        );
         _json(request.response, 200, {'mark': mark.toJson(), 'status': mark.status.name});
       case ['rounds', final n, ...final file] when get:
         final round = int.tryParse(n);

@@ -2,14 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:galley_core/galley_core.dart';
-import 'package:galley_web/src/api.dart';
+import 'package:galley_web/src/served_galley.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'support.dart';
 
 /// A `galley serve` stand-in that answers [routes] by path, and logs every request.
-(HttpGalleyApi, List<http.Request>) serve(
+(ServedGalley, List<http.Request>) serve(
   Map<String, (int, Object)> routes, {
   String page = 'http://localhost:7399/?by=Owner',
 }) {
@@ -23,7 +23,7 @@ import 'support.dart';
       headers: {'content-type': 'application/json'},
     );
   });
-  return (HttpGalleyApi(client, Uri.parse(page)), asked);
+  return (ServedGalley(client, Uri.parse(page)), asked);
 }
 
 void main() {
@@ -51,7 +51,7 @@ void main() {
 
   test("a frame's file name, with its = and ;, reaches the server as written", () async {
     final name = 'records/${home.toString().replaceAll(';', ',')};x.json';
-    final url = HttpGalleyApi(
+    final url = ServedGalley(
       MockClient((_) async => http.Response('', 200)),
       Uri.parse('http://localhost:7399/?by=Owner'),
     ).file(3, name);
@@ -83,8 +83,8 @@ void main() {
     await expectLater(
       api.round(1),
       throwsA(
-        isA<GalleyRefusal>()
-            .having((e) => e.status, 'status', 500)
+        isA<Refused>()
+            .having((e) => e.kind, 'kind', RefusalKind.damaged)
             .having((e) => e.message, 'message', 'the galley is damaged: round.json'),
       ),
     );
@@ -92,19 +92,19 @@ void main() {
 
   test('raising posts the frame, the widget, the point, the note and who', () async {
     final mark = buttonMark('m1', home, by: 'Owner');
+    final button = treeWithButton(pixel7).nodes[1];
     final (api, asked) = serve({
-      '/api/marks': (201, {'mark': mark.toJson()}),
+      '/api/marks': (201, {'mark': mark.toJson(), 'node': button.toJson(), 'round': 3}),
     });
 
     final raised = await api.raise(
       frame: home,
-      node: const [0],
-      at: (x: 205, y: 326),
+      target: const AtNode([0], at: (x: 205, y: 326)),
       note: 'make it primary',
       by: 'Owner',
     );
 
-    expect(raised.id, 'm1');
+    expect((raised.mark.id, raised.node.type, raised.round), ('m1', 'FilledButton', 3));
     expect(asked.single.method, 'POST');
     expect(asked.single.headers['Content-Type'], startsWith('application/json'));
     expect(jsonDecode(asked.single.body), {
@@ -123,10 +123,13 @@ void main() {
       '/api/marks/m%201/events': (200, {'mark': mark.toJson()}),
     });
 
-    await api.record('m 1', {'event': 'verified', 'by': 'Owner'});
+    await api.record('m 1', (at) => Verified(by: 'Owner', at: at));
 
     expect(asked.single.url.path, '/api/marks/m%201/events');
-    expect(jsonDecode(asked.single.body), {'event': 'verified', 'by': 'Owner'});
+    expect(jsonDecode(asked.single.body), {
+      'event': 'verified',
+      'by': 'Owner',
+    }, reason: 'the time is the server\'s, so none is sent');
   });
 
   group('a reply that is not a success', () {
@@ -140,8 +143,8 @@ void main() {
       await expectLater(
         api.marks(),
         throwsA(
-          isA<GalleyRefusal>()
-              .having((e) => e.status, 'status', 409)
+          isA<Refused>()
+              .having((e) => e.kind, 'kind', RefusalKind.conflict)
               .having((e) => e.message, 'message', contains('only an answered mark')),
         ),
       );
@@ -154,11 +157,9 @@ void main() {
       await expectLater(
         api.marks(),
         throwsA(
-          isA<GalleyRefusal>().having(
-            (e) => e.message,
-            'message',
-            'http://localhost:7399/api/marks answered 503',
-          ),
+          isA<Refused>()
+              .having((e) => e.kind, 'kind', RefusalKind.environment)
+              .having((e) => e.message, 'message', 'http://localhost:7399/api/marks answered 503'),
         ),
       );
     });
@@ -169,7 +170,7 @@ void main() {
         await expectLater(
           api.rounds(),
           throwsA(
-            isA<GalleyRefusal>().having(
+            isA<Refused>().having(
               (e) => e.message,
               'message',
               'http://localhost:7399/api/galley answered $status, not JSON',

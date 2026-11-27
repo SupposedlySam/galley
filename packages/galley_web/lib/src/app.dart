@@ -55,7 +55,7 @@ class _CanvasPageState extends State<CanvasPage> {
       listenable: widget.model,
       builder: (context, _) => switch (widget.model.state) {
         Loading() => const Center(child: CircularProgressIndicator()),
-        Refused(:final message) => _Refused(message, onRetry: widget.model.load),
+        Unavailable(:final message) => _Unavailable(message, onRetry: widget.model.load),
         final Shown shown => Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -78,8 +78,8 @@ class _CanvasPageState extends State<CanvasPage> {
   );
 }
 
-class _Refused extends StatelessWidget {
-  const _Refused(this.message, {required this.onRetry});
+class _Unavailable extends StatelessWidget {
+  const _Unavailable(this.message, {required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;

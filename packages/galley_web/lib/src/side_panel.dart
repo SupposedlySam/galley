@@ -1,7 +1,6 @@
 import 'package:galley_core/galley_core.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'api.dart';
 import 'canvas_model.dart';
 import 'marks.dart';
 

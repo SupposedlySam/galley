@@ -1,5 +1,4 @@
 import 'package:galley_core/galley_core.dart';
-import 'package:galley_web/src/api.dart';
 
 // Builders for the canvas tests: frames on named devices, rounds held in memory, and a backend
 // that keeps marks the way `galley serve` does, by the core's own rules.
@@ -87,22 +86,22 @@ Map<String, Object?> roundFiles(List<FrameKey> keys) {
   };
 }
 
-/// A backend in memory that keeps marks by the core's rules, as `galley serve` does, and
+/// A galley in memory that keeps marks by the core's rules, as `galley serve` does, and
 /// remembers what it was asked.
-final class FakeGalleyApi implements GalleyApi {
-  FakeGalleyApi({this.roundsList = const [1], Map<String, Object?>? files, this.refuse})
+final class FakeGalley implements Galley {
+  FakeGalley({this.roundsList = const [1], Map<String, Object?>? files, this.refuse})
     : files = files ?? roundFiles([keyOf('home', pixel7)]);
 
   final List<int> roundsList;
   final Map<String, Object?> files;
 
   /// When set, every call is refused with it.
-  GalleyRefusal? refuse;
+  Refused? refuse;
 
   /// Every mark, by id, and the round each was placed in (null: none).
   final marksById = <String, (Mark, int?)>{};
 
-  /// The events recorded, as sent.
+  /// The events recorded, as sent: without a time, which the galley gives.
   final recorded = <(String, JsonMap)>[];
 
   /// How many marks were raised.
@@ -142,47 +141,40 @@ final class FakeGalleyApi implements GalleyApi {
   }
 
   @override
-  Future<Mark> raise({
+  Future<({Mark mark, WidgetNode node, int round})> raise({
     required FrameKey frame,
-    required IndexPath node,
-    required ({double x, double y}) at,
+    required PinTarget target,
     required String note,
     required String by,
   }) async {
     _check();
+    final (:node, :pin) = target.resolve(treeWithButton(pixel7));
     raised++;
-    final tree = treeWithButton(pixel7);
-    final widget = tree.nodes.firstWhere((n) => n.indexPath.join() == node.join());
     final mark = Mark(
       id: 'm$raised',
       frame: frame,
-      anchor: Anchor.of(widget),
-      pin: PinOffset.within(widget.rect, at.x, at.y),
+      anchor: Anchor.of(node),
+      pin: pin,
       note: note,
       by: by,
       at: now,
     );
     marksById[mark.id] = (mark, roundsList.last);
-    return mark;
+    return (mark: mark, node: node, round: roundsList.last);
   }
 
   @override
-  Future<Mark> record(String id, JsonMap event) async {
+  Future<Mark> record(String id, MarkEvent Function(DateTime at) event) async {
     _check();
-    recorded.add((id, event));
+    final e = event(now);
+    recorded.add((id, e.toJson()..remove('at')));
     final (mark, round) = marksById[id]!;
-    final MarkEvent e;
-    try {
-      e = MarkEvent.fromJson({...event, 'at': now.toIso8601String()}, 'event');
-    } on FormatException catch (x) {
-      throw GalleyRefusal(400, x.message);
-    }
     try {
       final next = mark.record(e);
       marksById[id] = (next, round);
       return next;
     } on StateError catch (x) {
-      throw GalleyRefusal(409, x.message);
+      throw Refused.conflict(x.message);
     }
   }
 

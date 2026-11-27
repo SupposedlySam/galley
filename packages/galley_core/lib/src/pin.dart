@@ -1,6 +1,7 @@
 import 'anchor.dart';
 import 'frame_tree.dart';
 import 'geometry.dart';
+import 'json.dart';
 
 /// Where a new mark is pinned: a point in the frame, or a widget by its index path.
 ///
@@ -10,6 +11,35 @@ import 'geometry.dart';
 /// a click names.
 sealed class PinTarget {
   const PinTarget();
+
+  /// Reads the `node` and `at` of [request], the form [toJson] writes: `"node": [0, 1]` names a
+  /// widget, `"at": [x, y]` a point in the frame's logical pixels, and both, the widget and
+  /// where on it.
+  factory PinTarget.fromJson(JsonMap request, String context) {
+    final r = JsonReader(request, context);
+    return switch ((request['node'], request['at'])) {
+      (List<Object?>(), null) => AtNode(r.integers('node')),
+      (List<Object?>(), [final num x, final num y]) => AtNode(
+        r.integers('node'),
+        at: (x: x.toDouble(), y: y.toDouble()),
+      ),
+      (null, [final num x, final num y]) => AtPoint(x.toDouble(), y.toDouble()),
+      // A mark's `pin` comes back as {"dx", "dy"}, and the first adopting app sent that as
+      // "at". Said, not accepted: a pin is a fraction of its widget, which is worked out from
+      // where in the frame the click was. Rejected: taking either shape, two ways to say one
+      // thing, one of which cannot be checked against the widget's box.
+      (_, Map<String, Object?>()) => throw FormatException(
+        '$context.at: [x, y] in the frame\'s logical pixels, not a pin\'s {"dx", "dy"}: the '
+        'pin, a fraction of the widget, is worked out from it',
+      ),
+      _ => throw FormatException(
+        '$context: give "node": [0, 1], "at": [x, y], or both (the widget, and where in it)',
+      ),
+    };
+  }
+
+  /// The `node` and `at` of a request, which [PinTarget.fromJson] reads.
+  JsonMap toJson();
 
   /// The widget this names in [tree], and where on it. Throws [PinMissed] saying why when it
   /// names none.
@@ -31,6 +61,11 @@ final class AtPoint extends PinTarget {
   ({WidgetNode node, PinOffset pin}) resolve(FrameTree tree) => switch (tree.deepestAt(x, y)) {
     final node? => (node: node, pin: PinOffset.within(node.rect, x, y)),
     null => throw PinMissed('no widget at $this'),
+  };
+
+  @override
+  JsonMap toJson() => {
+    'at': [x, y],
   };
 
   @override
@@ -65,6 +100,12 @@ final class AtNode extends PinTarget {
       _ => throw PinMissed('$this is outside ${node.type}'),
     };
   }
+
+  @override
+  JsonMap toJson() => {
+    'node': path,
+    if (at case (:final x, :final y)) 'at': [x, y],
+  };
 
   /// Whether ([x], [y]) is in [r], edges included: a pin on a widget's edge is on the widget.
   static bool _inside(LogicalRect r, double x, double y) =>

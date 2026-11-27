@@ -10,7 +10,6 @@ import 'canvas.dart';
 import 'galley_directory.dart';
 import 'galley_server.dart';
 import 'local_galley.dart';
-import 'refused.dart';
 import 'renderer.dart';
 
 /// What the commands need from the world, so a test can supply all of it.
@@ -162,10 +161,10 @@ abstract class _GalleyCommand extends Command<int> {
   /// Appends the event [build] makes to the mark [id], and says what the mark is now.
   ///
   /// An event the core refuses to construct (a reopen with no note) is a usage error.
-  int record(String id, MarkEvent Function(DateTime at) build) {
+  Future<int> record(String id, MarkEvent Function(DateTime at) build) async {
     final Mark next;
     try {
-      next = local.record(id, build);
+      next = await local.record(id, build);
     } on ArgumentError catch (e) {
       throw UsageException('${e.message}', usage);
     }
@@ -321,7 +320,7 @@ final class _Pull extends _GalleyCommand {
   Future<int> run() async {
     final latest = galley.rounds().lastOrNull;
     final all = _args.flag('all');
-    final items = await local.workItems(all: all);
+    final items = await workItems(local, all: all);
     if (_args.flag('json')) {
       c.out.writeln(
         const JsonEncoder.withIndent('  ').convert({'latest_round': latest, 'items': items}),

@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:galley_core/galley_core.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'api.dart';
 import 'board.dart';
 import 'canvas_model.dart';
 import 'composer.dart';

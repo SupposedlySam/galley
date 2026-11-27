@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'refused.dart';
+import 'package:galley_core/galley_core.dart';
 
 /// Writes a round into a directory. `pack` asks for one, then reads what was written.
 abstract interface class RoundRenderer {

@@ -3,8 +3,6 @@ import 'dart:io';
 
 import 'package:galley_core/galley_core.dart';
 
-import 'refused.dart';
-
 /// A galley kept as a directory: every mark, and every round with where each mark is in it.
 ///
 /// ```
@@ -159,18 +157,18 @@ final class GalleyDirectory {
   ///
   /// A round with no `placements.json` is skipped: a pack that died after rendering and before
   /// carrying. Its marks are carried from the round before.
-  List<({int? round, Carried carried})> lastPlaced() {
+  List<PlacedMark> lastPlaced() {
     final placed = [
       for (final n in rounds().reversed)
         if (placements(n) case final p?) (n, p),
     ];
     return [
       for (final m in marks())
-        placed
-                .map((e) => e.$2.of(m.id) == null ? null : (round: e.$1, carried: e.$2.of(m.id)!))
-                .nonNulls
-                .firstOrNull ??
-            (round: null, carried: Carried.raised(m)),
+        [
+              for (final (n, p) in placed)
+                if (p.of(m.id) case final c?) PlacedMark(n, c),
+            ].firstOrNull ??
+            PlacedMark(null, Carried.raised(m)),
     ];
   }
 

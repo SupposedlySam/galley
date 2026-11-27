@@ -1,7 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'package:material_ui/material_ui.dart';
 
-import 'src/api.dart';
+import 'src/served_galley.dart';
 import 'src/app.dart';
 import 'src/canvas_model.dart';
 
@@ -11,7 +11,7 @@ void main() {
   runApp(
     GalleyCanvasApp(
       model: CanvasModel(
-        HttpGalleyApi(http.Client(), Uri.base),
+        ServedGalley(http.Client(), Uri.base),
         reviewer: Uri.base.queryParameters['by'] ?? '',
       ),
     ),

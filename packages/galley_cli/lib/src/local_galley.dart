@@ -3,12 +3,11 @@ import 'dart:io';
 import 'package:galley_core/galley_core.dart';
 
 import 'galley_directory.dart';
-import 'refused.dart';
 
-/// What a person or an agent does to a local galley: raise a mark, record an event on one, and
-/// list them as work items. The `galley` commands and `galley serve` both call this, so a mark
-/// raised from the canvas is the same as one raised from the command line.
-final class LocalGalley {
+/// A [Galley] on this machine, in `.galley/` (D12). The `galley` commands and `galley serve`
+/// both call this, so a mark raised from the canvas is the same as one raised from the command
+/// line.
+final class LocalGalley implements Galley {
   /// The galley in [directory] of the app whose git repository is at [repository], with [now]
   /// for event times and [newId] for new marks.
   LocalGalley(this.directory, {required this.repository, required this.now, required this.newId});
@@ -25,6 +24,18 @@ final class LocalGalley {
   /// A new mark's id.
   final String Function() newId;
 
+  @override
+  Future<List<int>> rounds() async => directory.rounds();
+
+  @override
+  Future<StoredRound> round(int n) => directory.readRound(n);
+
+  @override
+  Uri file(int n, String path) => Uri.file(_absolute('${directory.roundPath(n)}/$path'));
+
+  @override
+  Future<List<PlacedMark>> marks() async => directory.lastPlaced();
+
   /// The latest finished round. Refused when there is none.
   int latestRound() {
     final rounds = directory.rounds();
@@ -34,11 +45,9 @@ final class LocalGalley {
     return rounds.last;
   }
 
-  /// Raises a mark on the widget at [target] in [frame] of the latest round, and places it
-  /// there as Raised. Returns the mark and the widget it was pinned to.
-  ///
   /// Everything is checked before an id is taken or a file written, so a refused mark leaves
   /// no trace.
+  @override
   Future<({Mark mark, WidgetNode node, int round})> raise({
     required FrameKey frame,
     required PinTarget target,
@@ -78,14 +87,14 @@ final class LocalGalley {
     return (mark: mark, node: node, round: n);
   }
 
-  /// Appends the event [build] makes to the mark [id], and returns the mark as it is now.
   /// Refused when there is no such mark, or when its status does not allow the event.
-  Mark record(String id, MarkEvent Function(DateTime at) build) {
+  @override
+  Future<Mark> record(String id, MarkEvent Function(DateTime at) event) async {
     final mark = directory.mark(id);
     if (mark == null) throw Refused.missing('no mark "$id" in ${directory.path}');
     final Mark next;
     try {
-      next = mark.record(build(now().toUtc()));
+      next = mark.record(event(now().toUtc()));
     } on StateError catch (e) {
       // The core says why, in the event's own words: a status that does not allow it, or a
       // withdrawal by someone who did not raise the mark.
@@ -114,45 +123,5 @@ final class LocalGalley {
       throw Refused.invalid('$given is not a commit in the repository at $repository');
     }
     return '${r.stdout}'.trim();
-  }
-
-  /// Every mark waiting on an answer (every mark, with [all]), where it was last placed, as the
-  /// JSON `pull --json` prints and `galley serve` returns.
-  ///
-  /// `image` names the frame's PNG in the round the mark was last placed in, or is null when
-  /// that round is unknown or the frame has no image. [imageAt] makes the name from the round
-  /// and the image's path in it: an absolute path by default, for an agent on this machine,
-  /// and a URL for `galley serve`.
-  Future<List<JsonMap>> workItems({
-    bool all = false,
-    String Function(int round, String image)? imageAt,
-  }) async {
-    final rounds = <int, StoredRound>{};
-    final name = imageAt ?? (n, image) => _absolute('${directory.roundPath(n)}/$image');
-    return [
-      for (final p in directory.lastPlaced())
-        if (all || p.carried.mark.status.awaitsAnswer)
-          await _item(p.round, p.carried, rounds, name),
-    ];
-  }
-
-  Future<JsonMap> _item(
-    int? n,
-    Carried carried,
-    Map<int, StoredRound> rounds,
-    String Function(int, String) name,
-  ) async {
-    final stored = n == null ? null : rounds[n] ??= await directory.readRound(n);
-    final image = stored?.round.frame(carried.mark.frame)?.record.image;
-    return {
-      'id': carried.mark.id,
-      'status': carried.mark.status.name,
-      'round': n,
-      'placement': carried.placement.name,
-      'where': carried.placement.toJson(),
-      'anchor': carried.anchor.toJson(),
-      'image': image == null ? null : name(n!, image),
-      'mark': carried.mark.toJson(),
-    };
   }
 }

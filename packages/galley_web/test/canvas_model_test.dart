@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:galley_core/galley_core.dart';
-import 'package:galley_web/src/api.dart';
 import 'package:galley_web/src/board.dart';
 import 'package:galley_web/src/canvas_model.dart';
 
@@ -49,8 +48,8 @@ void main() {
     );
   });
 
-  Future<(CanvasModel, FakeGalleyApi)> loaded({String reviewer = 'Owner'}) async {
-    final api = FakeGalleyApi(roundsList: [1, 2]);
+  Future<(CanvasModel, FakeGalley)> loaded({String reviewer = 'Owner'}) async {
+    final api = FakeGalley(roundsList: [1, 2]);
     final model = CanvasModel(api, reviewer: reviewer, now: () => t);
     await model.load();
     return (model, api);
@@ -58,7 +57,7 @@ void main() {
 
   group('load', () {
     test('shows the latest round, with its board and every mark', () async {
-      final api = FakeGalleyApi(roundsList: [1, 2])..seed(byStatus[MarkStatus.open]!, round: 2);
+      final api = FakeGalley(roundsList: [1, 2])..seed(byStatus[MarkStatus.open]!, round: 2);
       final model = CanvasModel(api);
       final states = <CanvasState>[];
       model.addListener(() => states.add(model.state));
@@ -73,28 +72,28 @@ void main() {
     });
 
     test('a galley with no rounds says how to make one', () async {
-      final model = CanvasModel(FakeGalleyApi(roundsList: const []));
+      final model = CanvasModel(FakeGalley(roundsList: const []));
       await model.load();
-      expect((model.state as Refused).message, contains('galley pack'));
+      expect((model.state as Unavailable).message, contains('galley pack'));
     });
 
     test("a refusal is shown in the backend's words", () async {
-      final model = CanvasModel(FakeGalleyApi(refuse: const GalleyRefusal(500, 'damaged')));
+      final model = CanvasModel(FakeGalley(refuse: const Refused.damaged('damaged')));
       await model.load();
-      expect((model.state as Refused).message, 'damaged');
+      expect((model.state as Unavailable).message, 'damaged');
     });
 
     test('a round it cannot read is said so, not shown empty', () async {
-      final model = CanvasModel(FakeGalleyApi(files: {'index.json': 'not a manifest'}));
+      final model = CanvasModel(FakeGalley(files: {'index.json': 'not a manifest'}));
       await model.load();
-      expect((model.state as Refused).message, startsWith('The galley sent something'));
+      expect((model.state as Unavailable).message, startsWith('The galley sent something'));
     });
   });
 
   group('offers', () {
     /// What [reviewer] is offered on each status, as `status: [reviews]`.
     Map<MarkStatus, List<Review>> offered(String reviewer) {
-      final model = CanvasModel(FakeGalleyApi(), reviewer: reviewer, now: () => t);
+      final model = CanvasModel(FakeGalley(), reviewer: reviewer, now: () => t);
       return {
         for (final MapEntry(key: status, value: mark) in byStatus.entries)
           status: [

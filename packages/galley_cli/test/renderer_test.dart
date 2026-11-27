@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:galley_cli/galley_cli.dart';
+import 'package:galley_core/galley_core.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -66,4 +66,44 @@ void main() {
       );
     });
   });
+
+  group('as JSON', () {
+    test('is read back as the same target', () {
+      for (final target in [
+        const AtPoint(20, 15),
+        const AtNode([0, 0]),
+        const AtNode([0], at: (x: 20, y: 15)),
+      ]) {
+        final back = PinTarget.fromJson(target.toJson(), 'request');
+        expect('$back', '$target');
+        expect(back.runtimeType, target.runtimeType);
+        expect(pinned(back), pinned(target));
+      }
+    });
+
+    test('names the fields it takes when given neither', () {
+      expect(
+        () => PinTarget.fromJson({'note': 'x'}, 'request'),
+        throwsA(
+          isA<FormatException>().having((e) => e.message, 'message', startsWith('request: give')),
+        ),
+      );
+    });
+
+    test("says a pin's {dx, dy} is not a point, rather than reading it as one", () {
+      expect(
+        () => PinTarget.fromJson({
+          'node': [0],
+          'at': {'dx': 0.5, 'dy': 0.5},
+        }, 'request'),
+        throwsA(
+          isA<FormatException>().having(
+            (e) => e.message,
+            'message',
+            startsWith('request.at: [x, y]'),
+          ),
+        ),
+      );
+    });
+  });
 }
