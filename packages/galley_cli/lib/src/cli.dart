@@ -9,6 +9,7 @@ import 'package:galley_core/galley_core.dart';
 import 'galley_directory.dart';
 import 'galley_server.dart';
 import 'local_galley.dart';
+import 'refused.dart';
 import 'renderer.dart';
 
 /// What the commands need from the world, so a test can supply all of it.
@@ -76,6 +77,7 @@ Future<int> runGalley(List<String> args, [GalleyContext? context]) async {
     ..addCommand(_AnswerCommand(c))
     ..addCommand(_Verify(c))
     ..addCommand(_Reopen(c))
+    ..addCommand(_Withdraw(c))
     ..addCommand(_Serve(c));
   try {
     return await runner.run(args) ?? 0;
@@ -409,6 +411,26 @@ final class _Reopen extends _GalleyCommand {
   Future<int> run() async {
     return record(markArg, (at) => Reopened(note ?? '', by: by, at: at));
   }
+}
+
+final class _Withdraw extends _GalleyCommand {
+  _Withdraw(super.c) {
+    argParser.addOption('note', help: 'Why: a duplicate of another mark, or a test.');
+    addBy();
+  }
+
+  @override
+  String get name => 'withdraw';
+
+  @override
+  String get invocation => 'galley withdraw <mark> --note <why> --by <name>';
+
+  @override
+  String get description =>
+      'Take back a mark you raised. It is kept, with its history, and waits on no one.';
+
+  @override
+  Future<int> run() async => record(markArg, (at) => Withdrawn(note ?? '', by: by, at: at));
 }
 
 final class _Serve extends _GalleyCommand {

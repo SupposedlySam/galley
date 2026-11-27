@@ -4,6 +4,14 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.7
+
+- `Withdrawn`: whoever raised a mark takes it back, saying why. `MarkStatus.withdrawn` is
+  final, and the mark keeps its history and is carried like any other (DESIGN D6). Withdrawn by
+  anyone else is refused, when written and when read.
+- `MarkEvent.apply` takes the mark's `raisedBy`, and every event has a `verb` and a `refusal`
+  saying why it is not allowed. `Mark.record` throws a `StateError` with that reason.
+
 ## 0.3.6
 
 - No changes. Released with `galley_cli` 0.3.6 (DESIGN D8).

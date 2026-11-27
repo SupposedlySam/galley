@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:galley_core/galley_core.dart';
 
 import 'galley_directory.dart';
+import 'refused.dart';
 
 /// What a person or an agent does to a local galley: raise a mark, record an event on one, and
 /// list them as work items. The `galley` commands and `galley serve` both call this, so a mark
@@ -27,8 +28,9 @@ final class LocalGalley {
   /// The latest finished round. Refused when there is none.
   int latestRound() {
     final rounds = directory.rounds();
-    if (rounds.isEmpty)
+    if (rounds.isEmpty) {
       throw Refused.conflict('${directory.path} has no rounds yet: run `galley pack`');
+    }
     return rounds.last;
   }
 
@@ -47,14 +49,23 @@ final class LocalGalley {
     final found = (await directory.readRound(n)).round.frame(frame);
     if (found == null) throw Refused.invalid('round $n has no frame $frame');
     final tree = found.tree;
-    if (tree == null)
+    if (tree == null) {
       throw Refused.conflict('frame $frame in round $n has no tree to pin a widget of');
+    }
     final (node, pin) = switch (target) {
       AtPoint(:final x, :final y) => switch (tree.deepestAt(x, y)) {
         final node? => (node, PinOffset.within(node.rect, x, y)),
         null => (null, null),
       },
-      AtNode(:final path) => (tree.at(path), const PinOffset(0.5, 0.5)),
+      AtNode(:final path, :final at) => switch ((tree.at(path), at)) {
+        (final node?, null) => (node, const PinOffset(0.5, 0.5)),
+        (final node?, (:final x, :final y)) when _inside(node.rect, x, y) => (
+          node,
+          PinOffset.within(node.rect, x, y),
+        ),
+        (final node?, _) => throw Refused.invalid('$target is outside ${node.type}'),
+        (null, _) => (null, null),
+      },
     };
     if (node == null || pin == null) throw Refused.invalid('no widget at $target in frame $frame');
     if (note.trim().isEmpty) throw const Refused.invalid('a mark says what is wrong');
@@ -81,16 +92,21 @@ final class LocalGalley {
   Mark record(String id, MarkEvent Function(DateTime at) build) {
     final mark = directory.mark(id);
     if (mark == null) throw Refused.missing('no mark "$id" in ${directory.path}');
-    final event = build(now().toUtc());
     final Mark next;
     try {
-      next = mark.record(event);
-    } on StateError {
-      throw Refused.conflict('mark $id is ${mark.status.name}, and cannot be ${_verb(event)} now');
+      next = mark.record(build(now().toUtc()));
+    } on StateError catch (e) {
+      // The core says why, in the event's own words: a status that does not allow it, or a
+      // withdrawal by someone who did not raise the mark.
+      throw Refused.conflict(e.message);
     }
     directory.saveMark(next);
     return next;
   }
+
+  /// Whether ([x], [y]) is in [r], edges included: a pin on a widget's edge is on the widget.
+  static bool _inside(LogicalRect r, double x, double y) =>
+      x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 
   /// [path] made absolute with no `.` or `..` in it. `--app` defaults to `.`, and an agent
   /// handed `app/./.galley/...` has a path that works and reads as a mistake.
@@ -107,16 +123,11 @@ final class LocalGalley {
       '--quiet',
       '$given^{commit}',
     ], workingDirectory: repository);
-    if (r.exitCode != 0)
+    if (r.exitCode != 0) {
       throw Refused.invalid('$given is not a commit in the repository at $repository');
+    }
     return '${r.stdout}'.trim();
   }
-
-  static String _verb(MarkEvent e) => switch (e) {
-    Answered() => 'answered',
-    Verified() => 'verified',
-    Reopened() => 'reopened',
-  };
 
   /// Every mark waiting on an answer (every mark, with [all]), where it was last placed, as the
   /// JSON `pull --json` prints and `galley serve` returns.
@@ -179,62 +190,27 @@ final class AtPoint extends PinTarget {
   String toString() => '$x,$y';
 }
 
-/// The widget at index [path] in the frame's tree, pinned at its centre.
+/// The widget at index [path] in the frame's tree, pinned at [at] inside it, or at its centre.
+///
+/// The canvas sends both: the reviewer clicks a point and then picks the widget, the deepest one
+/// there or one of its ancestors. Rejected: sending only the point, which can name only the
+/// deepest widget, so "the card" could never be marked by clicking its label.
 final class AtNode extends PinTarget {
-  /// The widget at [path].
-  const AtNode(this.path);
+  /// The widget at [path], pinned at [at] (logical pixels in the frame), or at its centre.
+  const AtNode(this.path, {this.at});
 
   /// Child indexes from the root.
   final List<int> path;
 
-  @override
-  String toString() => path.join('.');
-}
-
-/// What was asked cannot be done, and [message] says why. The CLI prints it and exits 1; the
-/// server answers with the status its [kind] names.
-///
-/// Every refusal names its kind. Rejected: one kind for all, which is what 0.3.5 had. Its
-/// server answered 409 to a blank note, and a client could not tell "fix your input" from "the
-/// mark moved on". Rejected too: a default kind, which would be a guess wearing a label.
-final class Refused implements Exception {
-  /// The request is well formed and means something that cannot be: a blank note, a frame the
-  /// round does not have, a commit that is not one.
-  const Refused.invalid(this.message) : kind = RefusalKind.invalid;
-
-  /// What the request is addressed to is not there: no such mark.
-  const Refused.missing(this.message) : kind = RefusalKind.missing;
-
-  /// The galley's state does not allow it now: a mark that is not answered cannot be verified,
-  /// and a galley with no rounds has nothing to mark.
-  const Refused.conflict(this.message) : kind = RefusalKind.conflict;
-
-  /// Something on this machine failed: a flutter that cannot run, a port that is taken.
-  const Refused.environment(this.message) : kind = RefusalKind.environment;
-
-  /// Why.
-  final String message;
-
-  /// Which kind of refusal it is.
-  final RefusalKind kind;
+  /// Where in the frame the pin was dropped, or null for the widget's centre. It must be
+  /// inside the widget.
+  final ({double x, double y})? at;
 
   @override
-  String toString() => 'Refused: $message';
-}
-
-/// The kinds of [Refused], as the server tells them apart.
-enum RefusalKind {
-  /// See [Refused.invalid].
-  invalid,
-
-  /// See [Refused.missing].
-  missing,
-
-  /// See [Refused.conflict].
-  conflict,
-
-  /// See [Refused.environment].
-  environment,
+  String toString() => switch (at) {
+    null => path.join('.'),
+    (:final x, :final y) => '${path.join('.')} at $x,$y',
+  };
 }
 
 /// The word a person reads for [p].

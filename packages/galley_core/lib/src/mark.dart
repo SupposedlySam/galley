@@ -15,7 +15,10 @@ enum MarkStatus {
   verified,
 
   /// A reviewer did not accept the answer; it waits for another.
-  reopened;
+  reopened,
+
+  /// Whoever raised it took it back: a duplicate, or a test. Final, and kept with its history.
+  withdrawn;
 
   /// Whether this status waits on an answer.
   bool get awaitsAnswer => this == open || this == reopened;
@@ -111,6 +114,7 @@ sealed class MarkEvent {
       'answered' => Answered(r.read('answer', Answer.fromJson), by: by, at: at),
       'verified' => Verified(by: by, at: at),
       'reopened' => Reopened(r.string('note'), by: by, at: at),
+      'withdrawn' => Withdrawn(r.string('note'), by: by, at: at),
       final other => throw FormatException('$context.event: unknown event "$other"'),
     };
   }
@@ -121,8 +125,17 @@ sealed class MarkEvent {
   /// When, in UTC.
   final DateTime at;
 
-  /// The status a mark in [from] moves to, or null when this event is not allowed from it.
-  MarkStatus? apply(MarkStatus from);
+  /// The status a mark in [from], raised by [raisedBy], moves to; or null when this event is
+  /// not allowed on it.
+  MarkStatus? apply(MarkStatus from, {required String raisedBy});
+
+  /// What a person reads for this event: "answered", "withdrawn".
+  String get verb;
+
+  /// Why this event is not allowed on a mark in [from] raised by [raisedBy], when [apply] says
+  /// it is not.
+  String refusal(MarkStatus from, {required String raisedBy}) =>
+      'is ${from.name}, and cannot be $verb now';
 
   /// The JSON form [MarkEvent.fromJson] reads.
   JsonMap toJson();
@@ -139,7 +152,11 @@ final class Answered extends MarkEvent {
   final Answer answer;
 
   @override
-  MarkStatus? apply(MarkStatus from) => from.awaitsAnswer ? MarkStatus.answered : null;
+  MarkStatus? apply(MarkStatus from, {required String raisedBy}) =>
+      from.awaitsAnswer ? MarkStatus.answered : null;
+
+  @override
+  String get verb => 'answered';
 
   @override
   JsonMap toJson() => {..._base('answered'), 'answer': answer.toJson()};
@@ -151,7 +168,11 @@ final class Verified extends MarkEvent {
   const Verified({required super.by, required super.at});
 
   @override
-  MarkStatus? apply(MarkStatus from) => from == MarkStatus.answered ? MarkStatus.verified : null;
+  MarkStatus? apply(MarkStatus from, {required String raisedBy}) =>
+      from == MarkStatus.answered ? MarkStatus.verified : null;
+
+  @override
+  String get verb => 'verified';
 
   @override
   JsonMap toJson() => _base('verified');
@@ -170,10 +191,52 @@ final class Reopened extends MarkEvent {
   final String note;
 
   @override
-  MarkStatus? apply(MarkStatus from) => from == MarkStatus.answered ? MarkStatus.reopened : null;
+  MarkStatus? apply(MarkStatus from, {required String raisedBy}) =>
+      from == MarkStatus.answered ? MarkStatus.reopened : null;
+
+  @override
+  String get verb => 'reopened';
 
   @override
   JsonMap toJson() => {..._base('reopened'), 'note': note};
+}
+
+/// Whoever raised the mark took it back, and said why: a duplicate of another mark, or a mark
+/// raised to try the tool.
+///
+/// It is an event, not a deletion, because nothing is erased: a withdrawn mark keeps its note
+/// and its history, and is still carried into every round. Only the person who raised it may
+/// withdraw it. Rejected: letting anyone withdraw, which would let an answerer close a mark
+/// without the reviewer's say; the app's owner who disagrees with a mark answers it `wont-fix`,
+/// and the reviewer verifies or reopens that. Allowed from every status but the final ones, so
+/// a duplicate that was already answered can still be taken back.
+final class Withdrawn extends MarkEvent {
+  /// Withdrawn by [by] at [at], because of [note].
+  Withdrawn(this.note, {required super.by, required super.at}) {
+    if (note.trim().isEmpty) {
+      throw ArgumentError.value(note, 'note', 'a withdrawal must say why');
+    }
+  }
+
+  /// Why it was taken back.
+  final String note;
+
+  static const _final = {MarkStatus.verified, MarkStatus.withdrawn};
+
+  @override
+  MarkStatus? apply(MarkStatus from, {required String raisedBy}) =>
+      by == raisedBy && !_final.contains(from) ? MarkStatus.withdrawn : null;
+
+  @override
+  String get verb => 'withdrawn';
+
+  @override
+  String refusal(MarkStatus from, {required String raisedBy}) => by == raisedBy
+      ? super.refusal(from, raisedBy: raisedBy)
+      : 'was raised by $raisedBy, and only they can withdraw it';
+
+  @override
+  JsonMap toJson() => {..._base('withdrawn'), 'note': note};
 }
 
 /// A reviewer's comment, pinned to a widget in one frame, and everything that happened to it.
@@ -189,7 +252,7 @@ final class Mark {
     required this.at,
     List<MarkEvent> history = const [],
   }) : history = List.unmodifiable(history),
-       status = _fold(id, history);
+       status = _fold(id, by, history);
 
   /// Reads the form [toJson] writes.
   factory Mark.fromJson(Object? json, String context) {
@@ -245,9 +308,16 @@ final class Mark {
   /// What [history] adds up to.
   final MarkStatus status;
 
-  /// A copy with [event] appended. Throws a [StateError] when [event] is not allowed in
-  /// [status], such as verifying a mark nobody answered.
-  Mark record(MarkEvent event) => Mark(
+  /// A copy with [event] appended. Throws a [StateError] saying why when [event] is not
+  /// allowed on this mark, such as verifying a mark nobody answered.
+  Mark record(MarkEvent event) {
+    if (event.apply(status, raisedBy: by) == null) {
+      throw StateError('mark $id ${event.refusal(status, raisedBy: by)}');
+    }
+    return _with(event);
+  }
+
+  Mark _with(MarkEvent event) => Mark(
     id: id,
     frame: frame,
     anchor: anchor,
@@ -270,12 +340,12 @@ final class Mark {
     'history': [for (final e in history) e.toJson()],
   };
 
-  static MarkStatus _fold(String id, List<MarkEvent> history) {
+  static MarkStatus _fold(String id, String by, List<MarkEvent> history) {
     var status = MarkStatus.open;
     for (final (i, event) in history.indexed) {
-      final next = event.apply(status);
+      final next = event.apply(status, raisedBy: by);
       if (next == null) {
-        throw StateError('mark $id: event $i (${event.runtimeType}) is not allowed when $status');
+        throw StateError('mark $id, event $i: ${event.refusal(status, raisedBy: by)}');
       }
       status = next;
     }

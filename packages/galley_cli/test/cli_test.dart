@@ -390,6 +390,29 @@ void main() {
     expect('$out', contains('raised on Badge'));
   });
 
+  test('withdraw takes back a mark by whoever raised it, and keeps it', () async {
+    await galley(['pack']);
+    await galley(['mark', '--frame', '$_home', '--node', '0', '--note', 'a test', '--by', 'r']);
+    expect(await galley(['withdraw', 'm1', '--by', 'r']), 64, reason: 'a withdrawal says why');
+    expect(await galley(['withdraw', 'm1', '--note', 'mine now', '--by', 'c']), 1);
+    expect('$err', contains('mark m1 was raised by r, and only they can withdraw it'));
+    expect(store().mark('m1')!.history, isEmpty, reason: 'nothing refused was recorded');
+
+    expect(await galley(['withdraw', 'm1', '--note', 'only trying it', '--by', 'r']), 0);
+    expect('$out', contains('m1: withdrawn'));
+    final m = store().mark('m1')!;
+    expect((m.status, m.note, m.history.length), (MarkStatus.withdrawn, 'a test', 1));
+    expect(await galley(['withdraw', 'm1', '--note', 'again', '--by', 'r']), 1);
+    expect('$err', contains('mark m1 is withdrawn, and cannot be withdrawn now'));
+
+    // Kept, and carried: the next round still places it, and pull leaves it out of the queue.
+    await galley(['pack']);
+    expect(store().placements(2)!.of('m1'), isNotNull);
+    expect((await pull())['items'], isEmpty);
+    final all = (await pull(['--all']))['items']! as List;
+    expect([for (final i in all.cast<JsonMap>()) (i['id'], i['status'])], [('m1', 'withdrawn')]);
+  });
+
   test('pack passes what follows -- to flutter test, and nothing when nothing does', () async {
     expect(await galley(['pack']), 0, reason: '$err');
     expect(renderedWith, isEmpty);

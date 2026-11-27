@@ -12,6 +12,7 @@ dart run galley_cli:galley answer <mark> fixed --commit <sha> [--note '...'] [--
 dart run galley_cli:galley answer <mark> wont-fix|question --note '...' [--by me]
 dart run galley_cli:galley verify <mark> [--by me]
 dart run galley_cli:galley reopen <mark> --note '...' [--by me]
+dart run galley_cli:galley withdraw <mark> --note '...' [--by me]
 dart run galley_cli:galley serve [--port 7340] [--web <dir>]
 ```
 
@@ -26,8 +27,10 @@ if the app's tree had uncommitted changes (DESIGN D11).
 `GET /api/marks` (what `pull --json --all` lists, with each image as a URL), `GET
 /api/rounds/<n>/<file>`, `POST /api/marks` and `POST /api/marks/<id>/events`. A POST is
 `application/json`, and a request whose Host is not loopback is refused. A frame is its key or
-its axes. A malformed request is 400, a well-formed one that cannot be 422, a mark that is not
-there 404, and an event its mark's status does not allow 409.
+its axes, and the widget is its `node`, a point `at`, or both. A malformed request is 400, a
+well-formed one that cannot be 422, a mark that is not there 404, an event its mark does not
+allow 409, and a galley whose own files do not read 500, naming the file (`serve` checks at
+start too).
 `--web <dir>` serves a built canvas at `/`.
 
 `pull --json` is for an agent working through the marks:

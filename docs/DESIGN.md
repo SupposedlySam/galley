@@ -29,7 +29,7 @@ packages/
                    Depends on nothing but the Dart SDK.
   galley/          Flutter, test-time. GalleyHost + FrameSource contracts, built-in axes,
                    the packer. Depends on galley_core and flutter_test.
-  galley_cli/      `galley pack | mark | pull | answer | verify | reopen` on a local galley
+  galley_cli/      `galley pack | mark | pull | answer | verify | reopen | withdraw | serve` on a local galley
                    (D12); `push` with the server. Depends on galley_core, never on Flutter.
 apps/
   galley_server/   planned: the backend (D7). Depends on galley_core's wire types.
@@ -194,8 +194,15 @@ frame missing from the new round is **retired**, with its history kept. Nothing 
   so a deleted widget would be reported as found.
 - **Exact means IoU ≥ 0.9.** That is about 5 px of drift on a 100 px wide box. Rejected: 1.0,
   which calls every sub-pixel re-layout Moved and trains reviewers to ignore the flag.
-- **A mark's status is a fold over an append-only event log** (answered, verified, reopened).
-  An illegal sequence is refused when it is written and again when it is read.
+- **A mark's status is a fold over an append-only event log** (answered, verified, reopened,
+  withdrawn). An illegal sequence is refused when it is written and again when it is read.
+- **A mark is taken back by a withdrawal, never by deleting it** (0.3.7). Only whoever raised
+  it may withdraw it, with a note saying why (a duplicate, a test), from any status but
+  verified. A withdrawn mark is final, keeps its history, and is carried into every round like
+  any other. Rejected: letting anyone withdraw, which would let an answerer close a mark
+  without the reviewer's say; an owner who disagrees answers `wont-fix`. Observed: with no way
+  to take a mark back, the first adopting app deleted a test mark's file by hand, and the
+  galley stopped holding together (D12).
 
 *Carry-forward as built (`galley_core/lib/src/round.dart`, 2026-11-26):*
 - **Every mark gets one placement per round**, verified marks included:
@@ -400,7 +407,8 @@ Until the server (D7), a galley is a directory, `.galley/` in the app's root by 
 
 `galley pack` renders round n+1 by running the app's galley test with `GALLEY_OUT` set
 (D3), reads it back through `StoredRound` in galley_core, and carries every mark into it from
-the round that last placed it. `mark`, `pull`, `answer`, `verify` and `reopen` work on it.
+the round that last placed it. `mark`, `pull`, `answer`, `verify`, `reopen` and `withdraw` work
+on it.
 
 - **One file per mark.** Two people answering two marks never write the same file. Rejected:
   one `marks.json`, where every answer rewrites every mark.
@@ -426,6 +434,13 @@ the round that last placed it. `mark`, `pull`, `answer`, `verify` and `reopen` w
   (D11), but the earlier rounds are already there: an untracked `.galley/` makes every round
   after the first look dirty. Ignoring it is the expected case; the server will hold the
   galley.
+- **A galley that does not hold together is refused, naming the file** (0.3.7): a mark or
+  placements file that does not read, a placement naming a mark with no file, a round record
+  listed and missing. It is `Refused.damaged`, never a `FormatException`, which callers read
+  as bad input: in 0.3.6 a mark file deleted by hand made every `POST /api/marks` a 400 that
+  blamed the request. `galley serve` reads every mark and placement before it listens, so it
+  says so at start. Records and trees are checked when read, not at start: they are large and
+  the packer's own.
 - **The reader is in galley_core** (`StoredRound` over a `RoundFiles` interface), so the
   server and the viewer read a round the same way the CLI does. A missing tree leaves its
   frame treeless (its marks Unplaced); a malformed one is refused, because a packer bug must
@@ -448,8 +463,8 @@ server. The two would drift on what they refuse.
 GET  /api/galley                rounds, latest_round
 GET  /api/marks                 every mark as a work item; image is a URL under /api/rounds
 GET  /api/rounds/<n>/<path>     a file of a finished round
-POST /api/marks                 frame (key | axes), node | at,   -> 201 mark, status, node, round
-                                note, by
+POST /api/marks                 frame (key | axes), node and/or  -> 201 mark, status, node, round
+                                at, note, by
 POST /api/marks/<id>/events     a MarkEvent's JSON, without at   -> 200 mark, status
 GET  /<path>                    the built canvas, from --web
 ```
@@ -474,13 +489,18 @@ GET  /<path>                    the built canvas, from --web
   `index.json`) serves nothing. Rejected: also refusing `..` and encoded separators one segment
   at a time. Mutation found no request that check refused and the root rule let through.
 - **A refusal says what kind it is** (`Refused.invalid`, `missing`, `conflict`,
-  `environment`), and the server answers 422, 404, 409 or 500 for it. A malformed request is
+  `environment`, `damaged`). The server answers 422, 404 and 409 for the first three, and 500 for
+  the last two. A malformed request is
   400, a wrong content type 415, a body over 1 MB 413, and a wrong method 405. 409 is kept for
   a mark whose status does not allow the event, so a client can tell "fix the input" from "the
   mark moved on". *Corrected in 0.3.6:* 0.3.5 answered every refusal 409, a blank note
   included. The first app to call it reported that. An oversized body is read to the end
   and dropped before the answer is sent. Answering early resets the connection, and the
   client sees a broken pipe instead of a 413.
+- **A widget is given by its node, a point, or both** (0.3.7). A point alone pins the deepest
+  widget there. Node and point together pin that widget at the point, which must be inside
+  it (422 otherwise): the canvas lets a reviewer click a label and choose the card around
+  it. Rejected: the point alone, which could only ever name the deepest widget.
 - **A frame is taken as its key or as its axes.** A mark's JSON carries the key string, and a
   record's axes read as an object, so whichever a client read goes back as it is.
 - **The port defaults to 7340**, so the canvas's address can be bookmarked. Rejected: a free
@@ -488,6 +508,41 @@ GET  /<path>                    the built canvas, from --web
 - *Mutation, 2026-11-26:* 20 mutants of the server were run, and every one left in the code
   is killed. The two that survived were the per-segment checks, and they were removed (see
   above). In 0.3.6, 12 more for the refusal kinds, the IPv6 bind and the key form, all killed.
-  Not tested: the fallback to IPv4 alone on a machine with no IPv6 loopback. Not decided yet:
-  how the built canvas ships to an app that adopts Galley by git tag.
-  That comes with the canvas.
+  In 0.3.7, 5 for a node with a point, 6 for a damaged galley and 7 for withdrawal in the
+  core, all killed; one survived at first (a point below the widget) until a test reached it.
+  Not tested: the fallback to IPv4 alone on a machine with no IPv6 loopback. How the built
+  canvas reaches an app is D14.
+
+## D14 · The canvas ships built, as a release asset `galley serve` fetches and checks (2026-11-26)
+
+`galley_web` is a Flutter web app, and an app adopts Galley by git tag (D8), so `galley
+serve` must find a built canvas that nobody on the app's side built. Measured on this
+machine: `flutter build web --release --no-web-resources-cdn` is 40 MB (CanvasKit 36 MB,
+`main.dart.js` 1.7 MB), 14 MB as tar.gz. Decided with 0.3.7, and built with the canvas's first
+release.
+
+- **The build is a GitHub release asset, `galley_web-<version>.tar.gz`, on the tag it was
+  built from.** `galley_cli` pins it in its source: the tag and the archive's SHA-256. A
+  release that does not change the canvas keeps the old pin.
+- **`galley serve` fetches it on first use**, into a cache outside the app
+  (`$GALLEY_CACHE`, else the platform's user cache directory, under `galley/`). The archive
+  must match the pinned SHA-256 before anything is unpacked, and it is unpacked beside its
+  final place and renamed into it, so a cache directory is whole or absent. After that,
+  `serve` starts with no network.
+- **A canvas that cannot be fetched is said, not hidden.** `serve` still serves the API,
+  and says at start that there is no canvas, why, and that `--web <dir>` serves one. A
+  mismatched SHA-256 is refused and nothing is kept.
+- **`--web <dir>` overrides it**, for working on the canvas itself.
+- **The build loads nothing from outside.** `--no-web-resources-cdn` puts CanvasKit in the
+  archive, so a galley can be reviewed offline (D13), and a reviewer's browser tells no
+  third party what it opened.
+- Rejected: **committing the build.** 40 MB a release, kept forever in this repo's history
+  and in the git mirror pub keeps of it for every adopter.
+- Rejected: **building it on demand from the pub cache.** It writes into the pub cache, or
+  copies the package and runs `pub get` in the copy, builds with whatever Flutter the app
+  pins (which this canvas was never tested on), and takes minutes. It also cannot work once
+  `galley_cli` is on pub.dev, which ships no Flutter sources for a pure-Dart package.
+- Rejected: **CanvasKit from Google's CDN.** It cuts the archive to about 2 MB, and makes the
+  canvas need the network and tell a third party when it is opened.
+- What it costs: a release that changes the canvas has one more step, building and attaching
+  the archive, and `galley_cli` gains the dependencies to check and unpack it.

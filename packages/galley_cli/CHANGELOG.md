@@ -4,6 +4,21 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.7
+
+From the first app to call `galley serve`, and for the canvas:
+- `galley withdraw <mark> --note --by`, and `POST /api/marks/<id>/events` with
+  `{"event": "withdrawn"}`: the supported way to take back a test mark or a duplicate, in
+  place of deleting its file. Only whoever raised the mark may.
+- A galley that does not hold together (a placement naming a deleted mark, a mark or record
+  that does not read) is `Refused.damaged`, naming the file: 500 from the server, not a 400
+  that blames the request, and refused when `galley serve` starts. `Refused` and
+  `RefusalKind` moved to `refused.dart`, still exported.
+- `POST /api/marks` takes `node` and `at` together: that widget, pinned where it was clicked.
+  A point outside it is 422. `AtNode` has an optional `at`.
+- A refused event says the core's reason, which for a withdrawal by someone else names who
+  raised the mark.
+
 ## 0.3.6
 
 Fixes from the first app to call `galley serve`:

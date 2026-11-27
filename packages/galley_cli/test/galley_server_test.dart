@@ -177,12 +177,34 @@ void main() {
     );
     expect(secondCode, 201, reason: '$second');
     expect(g.mark('m2')!.frame, FrameKey({'screen': 'blank'}));
+
+    // A widget and a point in it: the reviewer clicked the card's corner and picked the App.
+    final (thirdCode, third) = await json(
+      'POST',
+      '/api/marks',
+      body: {
+        'frame': 'screen=drawn',
+        'node': <int>[],
+        'at': [100, 50],
+        'note': 'the whole page',
+        'by': 'r',
+      },
+    );
+    expect(thirdCode, 201, reason: '$third');
+    expect(
+      (g.mark('m3')!.anchor.type, g.mark('m3')!.pin.dx, g.mark('m3')!.pin.dy),
+      ('App', 0.25, 0.0625),
+    );
     final (listCode, list) = await json('GET', '/api/marks');
     expect(listCode, 200);
     final items = ((list! as JsonMap)['items']! as List).cast<JsonMap>();
     expect(
       [for (final i in items) (i['id'], i['image'])],
-      [('m1', '/api/rounds/1/frames/drawn.png'), ('m2', null)],
+      [
+        ('m1', '/api/rounds/1/frames/drawn.png'),
+        ('m2', null),
+        ('m3', '/api/rounds/1/frames/drawn.png'),
+      ],
     );
     expect((await call('GET', items[0]['image']! as String)).$3, png);
   });
@@ -216,12 +238,12 @@ void main() {
       (
         {
           ...good,
-          'at': [1, 1],
+          'at': [300, 50],
         },
-        400,
-        'give one of',
+        422,
+        'is outside Card',
       ),
-      ({...good}..remove('node'), 400, 'give one of'),
+      ({...good}..remove('node'), 400, 'give "node"'),
       ({...good}..remove('note'), 400, 'note'),
       (
         {
@@ -297,6 +319,129 @@ void main() {
       reason: 'no such mark',
     );
     expect((await event({'event': 'deleted', 'by': 'r'})).$1, 400);
+  });
+
+  test('a mark is withdrawn by whoever raised it, and is still listed', () async {
+    await json(
+      'POST',
+      '/api/marks',
+      body: {
+        'frame': 'screen=drawn',
+        'node': [0],
+        'note': 'x',
+        'by': 'r',
+      },
+    );
+    Future<(int, Object?)> withdraw(String by) => json(
+      'POST',
+      '/api/marks/m1/events',
+      body: {'event': 'withdrawn', 'by': by, 'note': 'a duplicate'},
+    );
+    var (code, body) = await withdraw('c');
+    expect(
+      (code, (body! as JsonMap)['error']),
+      (409, 'mark m1 was raised by r, and only they can withdraw it'),
+    );
+    (code, body) = await withdraw('r');
+    expect((code, (body! as JsonMap)['status']), (200, 'withdrawn'));
+    final (_, marks) = await json('GET', '/api/marks');
+    final items = ((marks! as JsonMap)['items']! as List).cast<JsonMap>();
+    expect([for (final i in items) (i['id'], i['status'])], [('m1', 'withdrawn')]);
+  });
+
+  group('a galley whose own files do not read', () {
+    // What the adopting app did: delete a mark's file by hand, leaving a round's placements
+    // still naming it.
+    Future<void> damage() async {
+      await json(
+        'POST',
+        '/api/marks',
+        body: {
+          'frame': 'screen=drawn',
+          'node': [0],
+          'note': 'x',
+          'by': 'r',
+        },
+      );
+      File('${g.path}/marks/m1.json').deleteSync();
+    }
+
+    test('is 500 naming the file, not 400 blaming the request', () async {
+      await damage();
+      final (code, body) = await json(
+        'POST',
+        '/api/marks',
+        body: {
+          'frame': 'screen=drawn',
+          'node': [0],
+          'note': 'y',
+          'by': 'r',
+        },
+      );
+      expect(code, 500);
+      expect(
+        (body! as JsonMap)['error'],
+        allOf(
+          contains('does not hold together'),
+          contains('rounds/1/placements.json'),
+          contains('no mark "m1"'),
+        ),
+      );
+      expect((await json('GET', '/api/marks')).$1, 500);
+      expect(g.marks(), isEmpty, reason: 'nothing more was written');
+    });
+
+    test('is refused at start, naming the file', () async {
+      await damage();
+      await expectLater(
+        serve(),
+        throwsA(
+          isA<Refused>()
+              .having((r) => r.kind, 'kind', RefusalKind.damaged)
+              .having((r) => r.message, 'message', contains('rounds/1/placements.json')),
+        ),
+      );
+      final err = StringBuffer();
+      expect(
+        await runGalley([
+          '--app',
+          dir.path,
+          'serve',
+          '--port',
+          '0',
+        ], GalleyContext(out: StringBuffer(), err: err, environment: const {})),
+        1,
+      );
+      expect('$err', contains('rounds/1/placements.json'));
+    });
+
+    test('a round record that does not read, or is not there, is 500 too, naming it', () async {
+      final record = File('${g.roundPath(1)}/records/drawn.json');
+      Future<(int, Object?)> post() => json(
+        'POST',
+        '/api/marks',
+        body: {
+          'frame': 'screen=drawn',
+          'node': [0],
+          'note': 'y',
+          'by': 'r',
+        },
+      );
+      record.writeAsStringSync('{');
+      var (code, body) = await post();
+      expect(code, 500);
+      expect(
+        (body! as JsonMap)['error'],
+        'round 1: ${record.path}: not JSON (Unexpected end of input)',
+      );
+      record.deleteSync();
+      (code, body) = await post();
+      expect(code, 500);
+      expect(
+        (body! as JsonMap)['error'],
+        'round 1 in ${g.path}/rounds: records/drawn.json is listed and not there',
+      );
+    });
   });
 
   test('a wrong method is 405, a wrong path 404', () async {

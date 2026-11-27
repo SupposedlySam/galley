@@ -38,6 +38,38 @@ void main() {
     expect(g.mark('m1')!.at, at);
   });
 
+  test('a mark pinned by node and point is where it was dropped, on the edge too', () async {
+    // Card is (0, 0, 200, 100). Its right edge is on it; one pixel past is not.
+    for (final (x, y, dx, dy) in [(50.0, 25.0, 0.25, 0.25), (200.0, 100.0, 1.0, 1.0)]) {
+      final raised = await local().raise(
+        frame: drawn,
+        target: AtNode(const [0], at: (x: x, y: y)),
+        note: 'here',
+        by: 'r',
+      );
+      expect(raised.node.type, 'Card');
+      expect(raised.mark.pin.dx, dx, reason: '$x,$y');
+      expect(raised.mark.pin.dy, dy, reason: '$x,$y');
+    }
+    // Past each edge in turn: right, then bottom.
+    for (final (x, y) in [(201.0, 50.0), (100.0, 101.0)]) {
+      await expectLater(
+        local().raise(
+          frame: drawn,
+          target: AtNode(const [0], at: (x: x, y: y)),
+          note: 'n',
+          by: 'r',
+        ),
+        throwsA(
+          isA<Refused>()
+              .having((r) => r.kind, 'kind', RefusalKind.invalid)
+              .having((r) => r.message, 'message', '0 at $x,$y is outside Card'),
+        ),
+      );
+    }
+    expect([for (final m in g.marks()) m.id], ['m1', 'm2']);
+  });
+
   test('a blank author is refused here too, and takes no id', () async {
     for (final by in ['', '  ']) {
       await expectLater(

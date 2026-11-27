@@ -4,7 +4,7 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.6, the local loop.** Galley renders and records a round of frames from inside an
+**Status: 0.3.7, the local loop.** Galley renders and records a round of frames from inside an
 app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local galley: pack,
 mark, pull, answer, verify, with every mark carried into the next round. `galley serve` serves
 that galley on this machine for the canvas. The canvas and the server that outside reviewers
@@ -26,7 +26,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.6
+      ref: v0.3.7
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -104,7 +104,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley_cli
-      ref: v0.3.6
+      ref: v0.3.7
 ```
 
 Add `.galley/` to `.gitignore`. Otherwise the earlier rounds make every later round look as if
@@ -116,6 +116,7 @@ dart run galley_cli:galley mark --frame '<key>' --node 0.2 --note 'too tight' --
 dart run galley_cli:galley pull --json             # open marks, where each is now, with its PNG
 dart run galley_cli:galley answer <mark> fixed --commit <sha> --by me
 dart run galley_cli:galley verify <mark> --by me   # or: reopen <mark> --note '...' --by me
+dart run galley_cli:galley withdraw <mark> --note 'a duplicate of m3' --by me   # yours only
 ```
 
 `pack` runs `flutter test test/galley_test.dart` (`--test` to change it) and prints how many
@@ -125,7 +126,9 @@ is packed with `galley pack -- --run-skipped`. `--flutter` names one executable,
 under fvm, give the absolute path of its `flutter`. `pull` lists what waits on an answer;
 `pull --all` adds the answered marks waiting on a reviewer, and the closed ones. `--by` defaults
 to `GALLEY_BY`. Reviewers will mark on the canvas; `mark` is for the
-app's owner and for tests.
+app's owner and for tests. A mark is never deleted: whoever raised one takes it back with
+`withdraw`, and it is kept, with its history, waiting on no one. Do not delete files under
+`.galley/`; a galley that does not hold together is refused, naming the file.
 
 `galley serve` serves the galley on `http://localhost:7340/` (`--port` to change it) until
 Ctrl-C: the rounds' files, every mark, and new marks and events through the same checks as the

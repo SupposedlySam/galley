@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:galley_core/galley_core.dart';
 
+import 'refused.dart';
+
 /// A galley kept as a directory: every mark, and every round with where each mark is in it.
 ///
 /// ```
@@ -15,6 +17,11 @@ import 'package:galley_core/galley_core.dart';
 ///
 /// A mark is one file so that two people answering two marks never write the same file.
 /// Placements are per round because the next round is carried from the last one (DESIGN D12).
+///
+/// A stored file that does not read is [Refused.damaged], naming it: never a FormatException,
+/// which callers take as a bad request or bad input. Observed on the adopting app: a mark file
+/// deleted by hand, with a round's placements still naming it, made every POST a 400 that
+/// blamed the request.
 final class GalleyDirectory {
   /// The galley at [path]. Nothing is created until something is written.
   GalleyDirectory(this.path);
@@ -36,7 +43,7 @@ final class GalleyDirectory {
     if (!dir.existsSync()) return const [];
     final marks = [
       for (final f in dir.listSync().whereType<File>().where((f) => f.path.endsWith('.json')))
-        Mark.fromJson(_decode(f), f.path),
+        _read(f, Mark.fromJson),
     ];
     return marks..sort((a, b) {
       final byTime = a.at.compareTo(b.at);
@@ -47,7 +54,7 @@ final class GalleyDirectory {
   /// The mark with [id], or null.
   Mark? mark(String id) {
     final f = File(_markFile(id));
-    return f.existsSync() ? Mark.fromJson(_decode(f), f.path) : null;
+    return f.existsSync() ? _read(f, Mark.fromJson) : null;
   }
 
   /// Writes [mark], new or with events appended. Throws a [StateError] for any other change.
@@ -102,7 +109,15 @@ final class GalleyDirectory {
   }
 
   /// Round [n] as stored.
-  Future<StoredRound> readRound(int n) => StoredRound.read(_DirectoryFiles(roundPath(n)));
+  Future<StoredRound> readRound(int n) async {
+    try {
+      return await StoredRound.read(_DirectoryFiles(roundPath(n)));
+    } on FormatException catch (e) {
+      throw Refused.damaged('round $n: ${e.message}');
+    } on RoundFileMissing catch (e) {
+      throw Refused.damaged('round $n in $_rounds: ${e.path} is listed and not there');
+    }
+  }
 
   /// Where every mark is in round [n], or null when it was never carried (it has no
   /// `placements.json`).
@@ -110,7 +125,19 @@ final class GalleyDirectory {
     final f = File('${roundPath(n)}/placements.json');
     if (!f.existsSync()) return null;
     final byId = {for (final m in marks()) m.id: m};
-    return Placements.fromJson(_decode(f), f.path, (id) => byId[id]);
+    return _read(f, (json, context) => Placements.fromJson(json, context, (id) => byId[id]));
+  }
+
+  /// Reads every mark and every round's placements, and returns. Refused, naming the file,
+  /// when the galley does not hold together, so a server finds it at start, not at a request.
+  ///
+  /// Records and trees are left to the request that needs them: they are the packer's output,
+  /// a round of them is large, and a damaged one is refused when it is read, all the same.
+  void check() {
+    for (final n in rounds()) {
+      placements(n);
+    }
+    marks();
   }
 
   /// Writes round [n]'s placements.
@@ -143,6 +170,15 @@ final class GalleyDirectory {
     final tmp = File('$path.tmp')..parent.createSync(recursive: true);
     tmp.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(json));
     tmp.renameSync(path);
+  }
+
+  /// [f] decoded and read by [parse], with the file's path as the context of what it says.
+  static T _read<T>(File f, T Function(Object? json, String context) parse) {
+    try {
+      return parse(_decode(f), f.path);
+    } on FormatException catch (e) {
+      throw Refused.damaged('the galley does not hold together: ${e.message}');
+    }
   }
 
   static Object? _decode(File f) {

@@ -59,6 +59,78 @@ void main() {
       test('refuses to $name', () => expect(build, throwsStateError));
     }
 
+    group('withdrawn', () {
+      Withdrawn withdraw(String by) => Withdrawn('a duplicate of m2', by: by, at: t(5));
+      final answered = fresh().record(fix);
+      final reopened = answered.record(reopen(2));
+
+      test('by whoever raised it, from every status that is not final', () {
+        for (final (from, m) in [
+          (MarkStatus.open, fresh()),
+          (MarkStatus.answered, answered),
+          (MarkStatus.reopened, reopened),
+        ]) {
+          expect(m.status, from);
+          final w = m.record(withdraw('designer-a'));
+          expect(w.status, MarkStatus.withdrawn, reason: '$from');
+          expect(w.status.awaitsAnswer, isFalse);
+          expect(w.history, [...m.history, isA<Withdrawn>()], reason: 'kept, then appended');
+          expect(w.note, m.note);
+        }
+      });
+
+      test('not by anyone else, and the refusal says who may', () {
+        expect(
+          () => fresh().record(withdraw('claude')),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              'mark m1 was raised by designer-a, and only they can withdraw it',
+            ),
+          ),
+        );
+      });
+
+      test('not once final, and never twice', () {
+        final verified = answered.record(verify);
+        final withdrawn = fresh().record(withdraw('designer-a'));
+        for (final (m, status) in [(verified, 'verified'), (withdrawn, 'withdrawn')]) {
+          expect(
+            () => m.record(withdraw('designer-a')),
+            throwsA(
+              isA<StateError>().having(
+                (e) => e.message,
+                'message',
+                'mark m1 is $status, and cannot be withdrawn now',
+              ),
+            ),
+          );
+        }
+        expect(() => withdrawn.record(fix), throwsStateError);
+        expect(() => withdrawn.record(verify), throwsStateError);
+      });
+
+      test('must say why', () {
+        expect(() => Withdrawn(' ', by: 'designer-a', at: t0), throwsArgumentError);
+      });
+
+      test('a stored withdrawal by someone else is a FormatException naming the rule', () {
+        final json = fresh().toJson()..['history'] = [withdraw('claude').toJson()];
+        expect(
+          () => Mark.fromJson(json, 'mark'),
+          throwsA(
+            isA<FormatException>().having(
+              (e) => e.message,
+              'message',
+              'mark.history: mark m1, event 0: was raised by designer-a, and only they can '
+                  'withdraw it',
+            ),
+          ),
+        );
+      });
+    });
+
     test('recording returns a copy and leaves the original alone', () {
       final m = fresh();
       m.record(fix);
@@ -106,6 +178,11 @@ void main() {
       final back = Mark.fromJson(m.toJson(), 'mark');
       expect(back.toJson(), m.toJson());
       expect(back.status, MarkStatus.verified);
+      final withdrawn = fresh().record(Withdrawn('a test', by: 'designer-a', at: t(1)));
+      final w = Mark.fromJson(withdrawn.toJson(), 'mark');
+      expect(w.toJson(), withdrawn.toJson());
+      expect(w.status, MarkStatus.withdrawn);
+      expect((w.history.single as Withdrawn).note, 'a test');
       expect(back.frame, m.frame);
       expect(back.history.map((e) => e.runtimeType), [Answered, Reopened, Answered, Verified]);
     });

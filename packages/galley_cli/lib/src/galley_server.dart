@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:galley_core/galley_core.dart';
 
 import 'local_galley.dart';
+import 'refused.dart';
 
 /// A local galley over HTTP, for the canvas: its rounds as files, its marks as work items, and
 /// a mark raised or an event recorded through the same [LocalGalley] the commands use.
@@ -14,15 +15,16 @@ import 'local_galley.dart';
 ///                                   as a URL under /api/rounds
 /// GET  /api/rounds/<n>/<path>       a file of finished round n: index.json, records/, trees/,
 ///                                   frames/
-/// POST /api/marks                   {"frame": "<key>" | {...}, "node": [0, 1] | "at": [x, y],
-///                                   "note", "by"} -> 201 {"mark", "status", "node", "round"}
+/// POST /api/marks                   {"frame": "<key>" | {...}, "node": [0, 1] and/or
+///                                   "at": [x, y], "note", "by"}
+///                                   -> 201 {"mark", "status", "node", "round"}
 /// POST /api/marks/<id>/events       a MarkEvent's JSON without "at" -> 200 {"mark", "status"}
 /// GET  /<path>                      the canvas's files from `web`, when it is given
 /// ```
 ///
 /// Every error is {"error"}: a malformed request 400, a well-formed one that means something
-/// impossible 422 (a blank note, a frame the round lacks), anything not found 404, and a mark
-/// whose status does not allow the event 409.
+/// impossible 422 (a blank note, a frame the round lacks), anything not found 404, a mark
+/// whose status does not allow the event 409, and a galley whose own files do not read 500.
 ///
 /// It is for one machine. It binds loopback only, IPv4 and IPv6, and refuses a request whose Host is not
 /// loopback at its port: a page on another site that rebinds its name to 127.0.0.1 reaches the
@@ -40,7 +42,11 @@ final class GalleyServer {
   /// On `127.0.0.1` and, at the same port, `::1`: a client that resolves `localhost` to `::1`
   /// first and does not fall back would otherwise find nothing. A machine with no IPv6
   /// loopback is served on IPv4 alone; a port taken on `::1` fails the start, as on IPv4.
+  ///
+  /// Every mark and every round's placements are read first, and a galley that does not hold
+  /// together is refused here, naming the file, rather than at the first POST.
   static Future<GalleyServer> start(LocalGalley local, {int port = 0, String? web}) async {
+    local.directory.check();
     final v4 = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
     final servers = [v4];
     try {
@@ -109,6 +115,7 @@ final class GalleyServer {
     RefusalKind.missing: 404,
     RefusalKind.conflict: 409,
     RefusalKind.environment: 500,
+    RefusalKind.damaged: 500,
   };
 
   bool _isLoopbackHost(HttpRequest request) =>
@@ -131,8 +138,14 @@ final class GalleyServer {
         final body = JsonReader(json, 'request');
         final target = switch ((json['node'], json['at'])) {
           (List<Object?>(), null) => AtNode(body.integers('node')),
+          (List<Object?>(), [final num x, final num y]) => AtNode(
+            body.integers('node'),
+            at: (x: x.toDouble(), y: y.toDouble()),
+          ),
           (null, [final num x, final num y]) => AtPoint(x.toDouble(), y.toDouble()),
-          _ => throw const FormatException('request: give one of "node": [0, 1] and "at": [x, y]'),
+          _ => throw const FormatException(
+            'request: give "node": [0, 1], "at": [x, y], or both (the widget, and where in it)',
+          ),
         };
         final raised = await _local.raise(
           frame: _frame(json['frame']),
