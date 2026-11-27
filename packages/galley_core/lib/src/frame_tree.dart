@@ -132,15 +132,29 @@ final class FrameTree {
   ///
   /// This is what the pin tool snaps to. Among nodes of equal depth, the one painted last
   /// (later in pre-order) wins, because it is the one on top.
-  WidgetNode? deepestAt(double x, double y) {
-    WidgetNode? best;
-    for (final node in nodes) {
-      final r = node.rect;
-      if (x < r.left || x >= r.right || y < r.top || y >= r.bottom) continue;
-      if (best == null || node.indexPath.length >= best.indexPath.length) best = node;
-    }
-    return best;
+  WidgetNode? deepestAt(double x, double y) => allAt(x, y).firstOrNull;
+
+  /// Every node whose box contains the point ([x], [y]), deepest first, and among equal depths
+  /// the one painted last first. The first is [deepestAt].
+  ///
+  /// The canvas offers these when a reviewer clicks: the label under the cursor, and the card
+  /// around it. Rejected: the deepest node's ancestors. A child can overflow its parent, and an
+  /// ancestor that does not contain the point cannot be pinned at it.
+  List<WidgetNode> allAt(double x, double y) {
+    final at = [
+      for (final (i, node) in nodes.indexed)
+        if (_contains(node.rect, x, y)) (i, node),
+    ];
+    at.sort((a, b) {
+      final depth = b.$2.indexPath.length.compareTo(a.$2.indexPath.length);
+      return depth != 0 ? depth : b.$1.compareTo(a.$1);
+    });
+    return [for (final (_, node) in at) node];
   }
+
+  /// Half open, so a point on the edge two boxes share is in one of them, not both.
+  static bool _contains(LogicalRect r, double x, double y) =>
+      x >= r.left && x < r.right && y >= r.top && y < r.bottom;
 
   /// The deepest node whose box holds all of [region], or null when none does.
   ///

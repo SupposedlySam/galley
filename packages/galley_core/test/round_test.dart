@@ -243,6 +243,46 @@ void main() {
       ];
     }
 
+    test('each placement has the word a person reads, one per kind', () {
+      expect(
+        [for (final c in everyPlacement()) (c.mark.id, c.placement.name)],
+        [
+          ('raised', 'raised'),
+          ('exact', 'exact'),
+          ('moved', 'moved'),
+          ('lost', 'lost'),
+          ('unplaced', 'unplaced'),
+          ('retired', 'retired'),
+        ],
+      );
+    });
+
+    test('a pin is drawn where the widget is in this round, and only when it is on one', () {
+      final pins = {for (final c in everyPlacement()) c.mark.id: c.pin};
+      // Every placement, so a pin that a Lost, Unplaced or Retired mark claims is seen, and so is
+      // a Moved mark drawn where it was raised rather than where it was found.
+      expect(pins, {
+        'raised': (60.0, 30.0),
+        'exact': (60.0, 30.0),
+        'moved': (250.0, 520.0),
+        'lost': null,
+        'unplaced': null,
+        'retired': null,
+      });
+      expect(everyPlacement()[2].box, const LogicalRect(200, 500, 100, 40));
+      // Off centre, so the mark's own offset is seen to be used: every mark above is at 0.5, 0.5.
+      final corner = Mark(
+        id: 'c',
+        frame: _home,
+        anchor: Anchor.of(withBuy(buyRect).nodes[1]),
+        pin: const PinOffset(0.25, 1),
+        note: 'n',
+        by: 'r',
+        at: DateTime.utc(2026),
+      );
+      expect(Carried.raised(corner).pin, (35.0, 50.0));
+    });
+
     test('every placement round-trips, joined to its mark by id', () {
       final carried = everyPlacement();
       final marks = {for (final c in carried) c.mark.id: c.mark};

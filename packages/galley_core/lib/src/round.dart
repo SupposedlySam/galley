@@ -1,6 +1,7 @@
 import 'anchor.dart';
 import 'frame_key.dart';
 import 'frame_tree.dart';
+import 'geometry.dart';
 import 'json.dart';
 import 'mark.dart';
 import 'reanchor.dart';
@@ -97,6 +98,10 @@ sealed class Placement {
   /// The JSON form [Placement.fromJson] reads.
   JsonMap toJson();
 
+  /// The word a person reads for it: raised, exact, moved, lost, unplaced or retired. The
+  /// commands print it and the canvas shows it, so both say the same word (DESIGN D1).
+  String get name;
+
   static Evidence _evidence(JsonReader r, String key) {
     final name = r.string(key);
     return Evidence.values.firstWhere(
@@ -113,6 +118,9 @@ final class Raised extends Placement {
 
   @override
   JsonMap toJson() => {'kind': 'raised'};
+
+  @override
+  String get name => 'raised';
 }
 
 /// The mark's frame is in the round with a tree, and its widget was looked up: [result] says
@@ -123,6 +131,12 @@ final class Reanchored extends Placement {
 
   /// What the lookup found.
   final Reanchoring result;
+
+  @override
+  String get name => switch (result) {
+    final Located l => l.isExact ? 'exact' : 'moved',
+    Lost() => 'lost',
+  };
 
   @override
   JsonMap toJson() => switch (result) {
@@ -156,6 +170,9 @@ final class Unplaced extends Placement {
 
   @override
   JsonMap toJson() => {'kind': 'unplaced', 'reason': reason};
+
+  @override
+  String get name => 'unplaced';
 }
 
 /// The mark's frame is not in the round: the screen, state or axis value was removed. The mark
@@ -167,6 +184,9 @@ final class Retired extends Placement {
 
   @override
   JsonMap toJson() => {'kind': 'retired'};
+
+  @override
+  String get name => 'retired';
 }
 
 /// A mark, where it is in one round, and the anchor the next round looks for.
@@ -212,6 +232,23 @@ final class Carried {
   /// When the widget is not found ([Lost], [Unplaced], [Retired]) this is the last anchor that
   /// was, so a later round that has it again can still find it.
   final Anchor anchor;
+
+  /// The widget's box in this placement's round, or null when the mark is on no widget there.
+  ///
+  /// Raised: the widget it was pinned to. Located: the widget found, whose box [anchor] took.
+  /// Lost, Unplaced and Retired: none. [anchor] then holds where the widget was last seen,
+  /// and a pin drawn there would claim a place the round does not have.
+  LogicalRect? get box => switch (placement) {
+    Raised() || Reanchored(result: Located()) => anchor.rect,
+    Reanchored(result: Lost()) || Unplaced() || Retired() => null,
+  };
+
+  /// Where the pin is in this placement's round, in the frame's logical pixels: the mark's
+  /// offset inside [box]. Null when [box] is.
+  (double x, double y)? get pin => switch (box) {
+    final box? => mark.pin.pointIn(box),
+    null => null,
+  };
 
   /// The JSON form [Carried.fromJson] reads.
   JsonMap toJson() => {'mark': mark.id, 'placement': placement.toJson(), 'anchor': anchor.toJson()};

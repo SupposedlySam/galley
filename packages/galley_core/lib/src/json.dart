@@ -26,6 +26,9 @@ extension type const JsonReader._(({JsonMap map, String context}) _r) {
   /// The string at [key], or null when the key is absent or null.
   String? optionalString(String key) => _optional<String>(key, 'a string');
 
+  /// The integer at [key], or null when the key is absent or null.
+  int? optionalInteger(String key) => _optional<int>(key, 'an integer');
+
   /// The required integer at [key].
   int integer(String key) => _required<int>(key, 'an integer');
 

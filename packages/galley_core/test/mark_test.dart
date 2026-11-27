@@ -28,6 +28,19 @@ void main() {
   group('status', () {
     test('a new mark is open', () => expect(fresh().status, MarkStatus.open));
 
+    test('verified and withdrawn are final, and every other status waits on someone', () {
+      expect(
+        [for (final s in MarkStatus.values) (s, s.isFinal)],
+        [
+          (MarkStatus.open, false),
+          (MarkStatus.answered, false),
+          (MarkStatus.verified, true),
+          (MarkStatus.reopened, false),
+          (MarkStatus.withdrawn, true),
+        ],
+      );
+    });
+
     test('open → answered → verified', () {
       final m = fresh().record(fix);
       expect(m.status, MarkStatus.answered);

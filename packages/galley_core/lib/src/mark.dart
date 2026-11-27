@@ -22,6 +22,10 @@ enum MarkStatus {
 
   /// Whether this status waits on an answer.
   bool get awaitsAnswer => this == open || this == reopened;
+
+  /// Whether nothing more happens to it: verified or withdrawn. Every other status waits on
+  /// someone, the app or the reviewer.
+  bool get isFinal => this == verified || this == withdrawn;
 }
 
 /// How a mark was answered.
@@ -221,11 +225,9 @@ final class Withdrawn extends MarkEvent {
   /// Why it was taken back.
   final String note;
 
-  static const _final = {MarkStatus.verified, MarkStatus.withdrawn};
-
   @override
   MarkStatus? apply(MarkStatus from, {required String raisedBy}) =>
-      by == raisedBy && !_final.contains(from) ? MarkStatus.withdrawn : null;
+      by == raisedBy && !from.isFinal ? MarkStatus.withdrawn : null;
 
   @override
   String get verb => 'withdrawn';

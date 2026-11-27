@@ -35,6 +35,11 @@ void main() {
     expect(r.optionalString('a'), isNull);
     expect(r.optionalString('missing'), isNull);
     expect(() => r.optionalString('b'), failsNaming('x.b'));
+    final n = JsonReader({'a': null, 'b': 3, 'c': 'three'}, 'x');
+    expect(n.optionalInteger('a'), isNull);
+    expect(n.optionalInteger('missing'), isNull);
+    expect(n.optionalInteger('b'), 3);
+    expect(() => n.optionalInteger('c'), failsNaming('x.c: expected an integer or null'));
   });
 
   test('integers are not doubles', () {

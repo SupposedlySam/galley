@@ -73,6 +73,33 @@ void main() {
     });
   });
 
+  group('allAt', () {
+    final t = tree([
+      root,
+      node([0], 'Card', rect: const LogicalRect(0, 0, 200, 100)),
+      node([0, 0], 'Text', rect: const LogicalRect(10, 10, 50, 20)),
+      node([0, 1], 'Badge', rect: const LogicalRect(40, 10, 30, 20)),
+      // Overflows its parent: at (100, 150) it is there, and the Tile it belongs to is not.
+      node([1], 'Tile', rect: const LogicalRect(0, 100, 50, 50)),
+      node([1, 0], 'Shadow', rect: const LogicalRect(0, 100, 300, 100)),
+    ]);
+    List<String> at(double x, double y) => [for (final n in t.allAt(x, y)) n.type];
+
+    test('every widget under the point, deepest first, the one on top first among equals', () {
+      expect(at(45, 15), ['Badge', 'Text', 'Card', 'App']);
+      expect(at(15, 15), ['Text', 'Card', 'App']);
+    });
+    test('not an ancestor the point is outside of', () {
+      expect(at(100, 150), ['Shadow', 'App']);
+    });
+    test('its first is deepestAt, wherever the point is', () {
+      for (final (x, y) in [(45.0, 15.0), (15.0, 15.0), (100.0, 150.0), (200.0, 50.0)]) {
+        expect(t.allAt(x, y).first, same(t.deepestAt(x, y)), reason: '$x,$y');
+      }
+      expect(t.allAt(500, 900), isEmpty);
+    });
+  });
+
   group('deepestContaining', () {
     final t = tree([
       root,
