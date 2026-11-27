@@ -31,9 +31,9 @@ packages/
                    the packer. Depends on galley_core and flutter_test.
   galley_cli/      `galley pack | mark | pull | answer | verify | reopen | withdraw | serve` on a local galley
                    (D12); `push` with the server. Depends on galley_core, never on Flutter.
-apps/
-  galley_server/   planned: the backend (D7). Depends on galley_core's wire types.
-  galley_web/      planned: the reviewer canvas (Flutter web). Depends on galley_core.
+  galley_server/   planned (D15): the server's schema and hooks, the validator, and the
+                   client the CLI and canvas share. Depends on galley_core, never on Flutter.
+  galley_web/      the reviewer canvas (Flutter web, D14). Depends on galley_core.
 ```
 
 - **Why:** carry-forward is the product, and it is pure logic over two trees. In
@@ -547,3 +547,159 @@ archive is 14,373,021 bytes in 54 entries. How a release builds and pins it is
   canvas need the network and tell a third party when it is opened.
 - What it costs: a release that changes the canvas has one more step, building and attaching
   the archive, and `galley_cli` gains the dependencies to check and unpack it.
+
+## D15 · The server is PocketBase with Galley's schema, and the core judges every write (2026-11-27)
+
+ROADMAP step 6 puts a galley on the server D7 chose, for reviewers who are not on the owner's
+machine. The local galley (D12) is unchanged; a galley is local or on a server, never both.
+This was reviewed before any of it was built, and the review's findings are folded in below.
+Each one names the failure it prevents.
+
+### What is stored, and who may write it
+
+| Collection | Holds | Written by | Never |
+|---|---|---|---|
+| `users` | email | nobody: an invite makes the user | sign-up, a password |
+| `galleys` | name, owner | any signed-in user, as owner | deleted |
+| `members` | galley, user, role (owner or reviewer), alias, revoked | the hook that makes a galley (its owner); the invitee, accepting, who chooses the alias; the owner, revoking | deleted; two for one user in one galley; an alias changed by a member |
+| `invites` | galley, email (lower-cased), role, accepted | the galley's owner; the hook that burns it on accepting | reused, accepted for someone else, made by a reviewer |
+| `rounds` | galley, number, frame keys, manifest (path, SHA-256, size), placements, finished | the owner, while pushing | read by a reviewer before `finished`; changed after it; two with one number |
+| `files` | round, path, the file | the owner, before the round is finished, at a path its manifest lists | updated or deleted; two at one path |
+| `marks` | galley, round, frame key, anchor, pin, note, author | any member, as themselves | updated or deleted; raised on a round a newer one replaced, or on a frame it does not have |
+| `events` | mark, seq, kind, note, commit, answer kind, author | any member, as themselves; an answer only the owner | updated or deleted; one the mark's history does not allow; two with one seq |
+
+Every rule also requires that the writer's membership is not revoked, and takes the galley
+from the row written to (the mark's, the round's), never from a field of the request.
+
+- **Nothing is erased, and the schema says so.** No relation cascades on delete, no
+  collection has a delete rule, and a migration test checks both, for every collection.
+  Rejected: a delete rule of nobody on top of cascading relations, which the spike had. One
+  deleted user row would then take every mark and event they wrote with it. What this does not
+  stop: whoever runs the server can edit its database. Galley does not defend against its
+  operator.
+- **A member is revoked, not removed.** The owner sets `revoked`, and from the next request
+  the member can neither read nor write. What they wrote stays, under their alias. D7 chose
+  PocketBase partly because revoking a member stops their next write. Building the server
+  without revocation would have dropped that.
+- **`by` is the member's alias in that galley.** It is chosen on accepting the invite: 1 to 40
+  letters, digits, spaces, `.`, `-` or `'`, with no control characters. It must be unique in
+  the galley, ignoring case and repeated spaces. Records store the author's user id, and the
+  client reads `by` through the membership. A mark's `by` and a withdrawal's `by` are then the
+  same string exactly when they are the same person, which is what `Withdrawn` compares (D12).
+  A superuser who corrects a typo corrects it everywhere at once. Rejected:
+  - one name per user, set once and unique on the server: a stranger could take "Sam" first,
+    and a typo was permanent;
+  - the user id: a person cannot read it in `pull --json`;
+  - the email: every member would see every other member's address;
+  - `by` stored on each record: a correction would split one person into two.
+
+  Not caught: two aliases that look alike in different scripts. `galley members` shows the
+  owner each alias next to its email.
+- **Events are typed columns, not a JSON blob.** `kind` is one of the event names, and
+  `note`, `commit` and the answer kind are fields. The client builds the core's `MarkEvent`
+  from them, and the time is the server's `created` (D13). Rejected: the event's JSON as
+  written. It carried a `by` and an `at` the client chose, and any shape that
+  `MarkEvent.fromJson` cannot read would make the mark unreadable for everyone.
+- **The core judges every write.** A hook gathers the write, the mark, its events in `seq`
+  order and the writer's role. It passes them as JSON to `galley_validate`, a Dart program
+  over galley_core compiled with `dart compile exe`, inside the write's transaction. The
+  validator answers `{"ok": true}` or `{"refused": "<why>"}`, which the hook returns as a 400.
+  It folds the history as `Mark` does and checks the new event with `MarkEvent.apply`. It also
+  checks the answer (a note, a commit of 7 to 40 hex digits), a reopen or withdrawal's note,
+  the anchor through `Anchor.fromJson`, and the pin's range. Seen on 0.40.6 (spike kept in
+  `.game_loop/notes/spike-exec/`, not tracked): `$os.exec` inside `runInTransaction` answers
+  in about 14 ms warm and 365 ms on the first call. A non-zero exit throws away the output, so
+  the validator always exits 0. Rejected:
+  - the fold written again in the hook's JavaScript, with a test that compares the two. The
+    copy would not have been one function but every rule above, and the comparison could only
+    cover the cases someone thought to list;
+  - galley_core compiled to JavaScript for the hook's runtime: untried, and dart2js expects a
+    browser's globals.
+
+  The cost is a Dart toolchain wherever the validator is built. `galley host` compiles it
+  with the Dart running `galley`, once per version, into the cache. A server elsewhere gets
+  it cross-compiled (`--target-os linux`, checked from macOS).
+- **Two writes to one mark at once cannot both land.** The hook gives each event `seq` =
+  the count of earlier events + 1, and (mark, seq) is unique. Both run inside the transaction
+  that judges the event. Of a withdrawal and an answer sent together, one is refused by the
+  index. The client refetches the history and tries again once, then reports the conflict.
+  Rejected: ordering by `created`, which has millisecond resolution, so two events could tie.
+- **A mark that still does not fold is shown damaged, alone.** If the database was edited, or
+  the validator has a bug, that mark is listed with the reason, and the others are read.
+  Locally, D12 refuses the whole galley, because the owner is its only writer and should fix
+  it. On a server, one bad record must not hide every other member's marks (an unknown is
+  never nothing, but it is not everything either).
+- **A round is finished last, and whole.** `galley push`:
+  1. creates the round with its frame keys and manifest;
+  2. uploads its files in parallel;
+  3. carries every mark;
+  4. sets `finished` and the placements in one update.
+
+  The hook refuses the finish unless every path in the manifest has a file and the placements
+  name every mark raised on an earlier round. That check runs in the finish's own transaction,
+  so a mark raised while the push ran makes the finish refused, and the push carries again.
+  A reader checks each file against the manifest's SHA-256 and names the one that differs. A
+  push that dies leaves an unfinished round that no reviewer reads, and the next push takes
+  the next number (D12). Rejected: placements as a file of the round. A finish could not check
+  a file, and a file is never replaced.
+- **A mark is raised on the newest finished round.** A raise on an older one is refused
+  ("round 4 is out; reload"), so every mark the canvas shows is placed in the round on screen.
+- **Mail is never sent by accident.** With no SMTP configured, PocketBase sends mail with the
+  machine's `sendmail`. Galley's hook refuses to send a code unless SMTP is set, or unless
+  `GALLEY_OTP_LOG` names a directory, where `galley host` writes the code for a local run.
+- **Limits are set, not defaulted.** A file is at most 20 MB, a manifest lists at most 5,000
+  files, a note is at most 4,000 characters, and PocketBase's rate limiter is on. Not built: a
+  quota on rounds. An owner can fill the disk, and the owner is the person who runs the server.
+- **A note is a reviewer's words.** `pull --json` hands notes to the agent that edits the
+  app. The README and `llms.txt` say a note is a request to weigh, never an instruction to
+  follow.
+
+### Where the code is
+
+```
+packages/galley_core/     + the Galley interface, pin resolution, the rules the validator runs
+packages/galley_server/   what speaks the server's language. Depends on galley_core.
+  lib/galley_server.dart    the client: sign-in, galleys, members, rounds, marks, events.
+                            Pure Dart and package:http, so the CLI and the canvas share it.
+  lib/pocketbase/           pb_migrations/ and pb_hooks/, run as they are by PocketBase
+  bin/galley_validate.dart  the judge the hooks call
+```
+
+- **One `Galley` interface, in the core.** The CLI's commands, `galley serve` and the canvas
+  speak to a galley through it: rounds, marks with their placements, raise and add an event.
+  `LocalGalley` (CLI), the server client (galley_server) and the canvas's client for `galley
+  serve` implement it. The work items `pull --json` prints are built from it in the core. The
+  refusal it throws moves to the core with it. Rejected: the server client as a fourth shape
+  beside `LocalGalley`, the D13 JSON and `GalleyApi`. Each command would then have had one
+  path for each galley.
+- **The client is one package both sides use.** Rejected: the mapping in galley_core and the
+  HTTP in each layer, which would write sign-in, paging and file tokens twice. Rejected too:
+  the client in galley_core, which depends on nothing but the SDK (D1).
+- **The schema is source that ships with the client, not a build.** `galley host` finds
+  `lib/pocketbase` and the validator's source through the package's own location, so the
+  schema is always the same version as the CLI that runs it. Rejected: a release archive
+  pinned like the canvas (D14). The canvas is a build because building it needs the matching
+  Flutter. The schema needs no build, and the validator needs only the Dart already running.
+  An archive would add a pin to bump and a publish step to each server change.
+- **A round reads in parallel.** The client fetches a round's files eight at a time and gets
+  a new file token when one expires. Read one at a time, about 310 files would take tens of
+  seconds over a real network.
+- **`galley host` runs a server on this machine** for the step 6 check and for working on
+  the server. It fetches the pinned PocketBase for this platform, checks its SHA-256 as D14
+  checks the canvas, and runs it with the schema, the hooks, the validator and the canvas.
+  The fetch, the check and the unpacking are the canvas cache's, generalized to any pinned
+  archive. It is not hosting (ROADMAP step 8), which runs the same files next to the same
+  binary. The server's tests are galley_cli's, through `galley host`. galley_server cannot
+  depend on galley_cli, which depends on it.
+- **The commands follow the galley.** `galley link <url>` writes `.galley/server.json`. From
+  then on `pull`, `answer`, `verify`, `reopen`, `withdraw` and `mark` act on the server as
+  the signed-in user, and `push` replaces `pack`. In that mode `pack` and `--by` are refused,
+  not ignored. `galley login` signs in by emailed code. The token is kept in the user cache
+  directory, keyed by the server, never in `.galley/`, which may be committed (D12). The
+  owner's agent uses the owner's token, so its answers carry the owner's alias, as `--by`
+  does locally. The local marks and rounds stay where they are, unused, and `galley unlink`
+  goes back to them. Not built: importing local marks. Their `by` names nobody on the
+  server, and mapping each one to a member is a decision for the owner.
+- **The owner may verify their own answer.** The core allows it, and the server does not
+  narrow it, because the first adopting app's owner is also one of its reviewers. Narrowing it
+  is a rule for the validator, if a galley ever needs it.
