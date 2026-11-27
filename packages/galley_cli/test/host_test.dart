@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:galley_cli/galley_cli.dart';
 import 'package:test/test.dart';
@@ -15,6 +16,17 @@ import 'support/pocketbase.dart';
 // They are tested here, not in galley_server, because this is where they are run: through
 // LocalServer, with the validator it compiles. The first run fetches PocketBase into the
 // galley cache, as `galley host` does; later runs find it there.
+
+/// The status and text of a GET of [url]: a page, which [send] would read as JSON.
+Future<(int, String)> page(Uri url) async {
+  final client = HttpClient();
+  try {
+    final response = await (await client.getUrl(url)).close();
+    return (response.statusCode, await utf8.decodeStream(response));
+  } finally {
+    client.close();
+  }
+}
 
 /// [path]'s permission bits, as `stat` shows them: `rwx------`.
 String modeOf(String path) => FileStat.statSync(path).modeString().substring(0, 9);
@@ -167,13 +179,24 @@ void main() {
   });
 
   group('the host command', () {
+    /// A built canvas, so a start fetches nothing: the pinned one may not be released yet.
+    String canvas() {
+      final web = Directory('${tmp.path}/web');
+      if (!web.existsSync()) {
+        web.createSync();
+        File('${web.path}/index.html').writeAsStringSync('<html>canvas</html>');
+        File('${web.path}/main.dart.js').writeAsStringSync('// the canvas');
+      }
+      return web.path;
+    }
+
     test('starts the server, makes the owner, says where codes go, and stops', () async {
       final data = '${tmp.path}/command';
       final (out, err) = (StringBuffer(), StringBuffer());
       late Answer health;
       late bool owner;
       final code = await runGalley(
-        ['host', '--port', '0', '--data', data, '--owner', 'Cmd@Example.com'],
+        ['host', '--port', '0', '--data', data, '--owner', 'Cmd@Example.com', '--web', canvas()],
         GalleyContext(
           out: out,
           err: err,
@@ -198,6 +221,87 @@ void main() {
       expect(health.status, 200);
       expect(owner, isTrue, reason: '$out');
       expect('$out', contains('Sign-in codes are written to $data/otp'));
+    });
+
+    /// Runs `galley host` on [data] with [args], doing [then] with its URL while it runs.
+    Future<(int, String, String)> hosting(
+      String data,
+      List<String> args,
+      Future<void> Function(Uri url) then, {
+      Future<Uint8List> Function(Uri url)? fetch,
+    }) async {
+      final (out, err) = (StringBuffer(), StringBuffer());
+      final code = await runGalley(
+        ['host', '--port', '0', '--data', data, ...args],
+        GalleyContext(
+          out: out,
+          err: err,
+          environment: {'GALLEY_CACHE': cache.root},
+          fetch: fetch ?? httpFetch,
+          untilStopped: () =>
+              then(Uri.parse(RegExp(r'Hosting \S+ at (http://\S+)').firstMatch('$out')!.group(1)!)),
+        ),
+      );
+      return (code, '$out', '$err');
+    }
+
+    test('serves the canvas at its root, from the same origin as the API', () async {
+      final pages = <String, (int, String)>{};
+      final (code, out, err) = await hosting('${tmp.path}/served', ['--web', canvas()], (
+        url,
+      ) async {
+        for (final path in ['', '?galley=g1', 'main.dart.js']) {
+          pages[path] = await page(url.resolve('/$path'));
+        }
+        pages['api'] = ((await page(url.resolve('/api/health'))).$1, '');
+      });
+      expect((code, err), (0, ''));
+      expect(pages, {
+        '': (200, '<html>canvas</html>'),
+        '?galley=g1': (200, '<html>canvas</html>'),
+        'main.dart.js': (200, '// the canvas'),
+        'api': (200, ''),
+      });
+      expect(out, contains('The canvas is at http://'));
+      // Served from where it was built, not copied into the data directory.
+      expect(Directory('${tmp.path}/served/public').listSync(), isEmpty);
+    });
+
+    test('without a canvas still serves the API, and says why', () async {
+      late int health;
+      final (code, out, err) = await hosting(
+        '${tmp.path}/bare',
+        [],
+        (url) async => health = (await send(url, 'GET', '/api/health')).status,
+        // PocketBase is in the cache from setUpAll, so only the canvas is fetched.
+        fetch: (url) => throw HttpException('answered 404', uri: url),
+      );
+      expect((code, health), (0, 200));
+      expect(
+        err,
+        allOf(
+          contains('no canvas at http://'),
+          contains('could not fetch'),
+          contains('--web <dir>'),
+        ),
+      );
+      expect(out, isNot(contains('The canvas is at')));
+    });
+
+    test('refuses a --web with no build in it, before starting anything', () async {
+      final err = StringBuffer();
+      final code = await runGalley([
+        'host',
+        '--port',
+        '0',
+        '--data',
+        '${tmp.path}/noweb',
+        '--web',
+        tmp.path,
+      ], GalleyContext(out: StringBuffer(), err: err, environment: {'GALLEY_CACHE': cache.root}));
+      expect(code, isNot(0));
+      expect('$err', contains('has no index.html'));
+      expect(Directory('${tmp.path}/noweb').existsSync(), isFalse);
     });
 
     test('refuses a port that is not one, before starting anything', () async {

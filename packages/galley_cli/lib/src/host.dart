@@ -62,13 +62,15 @@ final class LocalServer {
 
   /// Starts PocketBase on [port] (a free one when 0) with its data in [data], fetching it
   /// and compiling the validator into [cache] when they are not there yet. [log] gets each
-  /// line PocketBase writes.
+  /// line PocketBase writes. [canvas], a built canvas, is served at `/`, from the same origin
+  /// as the API (DESIGN D15); without one, `/` serves the empty `public` in [data].
   ///
   /// Throws [Refused] saying why it could not.
   static Future<LocalServer> start({
     required String data,
     required ArchiveCache cache,
     int port = 8090,
+    String? canvas,
     void Function(String line)? log,
   }) async {
     final pin = PinnedPocketBase.forAbi();
@@ -109,9 +111,11 @@ final class LocalServer {
       // A change to the hooks is a new CLI, so a new start; and watching restarts PocketBase
       // underneath the process this holds.
       '--hooksWatch=false',
-      // Its default is beside the binary, in the cache. Empty until the canvas is served
-      // from here.
-      '--publicDir=$data/public',
+      // Its default is beside the binary, in the cache. The canvas's build is served from
+      // where it is, and not copied into the data directory: the pinned one is kept in the
+      // cache by version, so a copy would be a second one to keep in step. A `--web` given
+      // relative to the shell is read against the same directory: PocketBase inherits it.
+      '--publicDir=${canvas ?? '$data/public'}',
     ];
     // The password after `--`, which ends the flags (cobra, as PocketBase reads its command
     // line): a base64url password starts with "-" one time in 32, and was read as a flag
@@ -267,6 +271,10 @@ Future<void> _healthy(Uri url) async {
 /// galley_server and galley_core where this CLI was resolved: the schema and hooks, and the
 /// validator's source. Found through the package config, so they are always the versions this
 /// CLI runs with (DESIGN D15: the schema ships with the client).
+/// The validator `galley host` runs, compiled into the cache under [root] when it is not there
+/// yet; its path. Here for its test: two compiles at once each finish.
+Future<String> compiledValidator(String root) => _GalleySource.resolve().validator(root);
+
 final class _GalleySource {
   const _GalleySource(this.server, this.core, this.packageConfig);
 
@@ -327,23 +335,37 @@ final class _GalleySource {
     if (File(exe).existsSync()) return exe;
 
     Directory('$root/validate').createSync(recursive: true);
-    final partial = '$exe.partial-$pid$suffix';
-    final built = await Process.run(Platform.resolvedExecutable, [
-      'compile',
-      'exe',
-      '--packages=$packageConfig',
-      '-o',
-      partial,
-      '$server/bin/galley_validate.dart',
-    ]);
-    if (built.exitCode != 0) {
-      if (File(partial).existsSync()) File(partial).deleteSync();
-      throw Refused.environment(
-        'could not compile the validator with ${Platform.resolvedExecutable}: '
-        '${'${built.stderr}${built.stdout}'.trim()}',
-      );
+    // Compiled into a directory of its own, then renamed into place: two starts at once, in
+    // two processes or in one, each compile their own. Observed: a name made of the pid alone
+    // was shared by two test files in one process, and the first rename took the other's file
+    // ("Cannot rename file ... No such file or directory"). Rejected: a lock. The loser of
+    // the race costs one compile, and a lock left by a killed start would stop every start.
+    final staging = Directory('$root/validate').createTempSync('partial-');
+    final partial = '${staging.path}/galley_validate$suffix';
+    try {
+      final built = await Process.run(Platform.resolvedExecutable, [
+        'compile',
+        'exe',
+        '--packages=$packageConfig',
+        '-o',
+        partial,
+        '$server/bin/galley_validate.dart',
+      ]);
+      if (built.exitCode != 0) {
+        throw Refused.environment(
+          'could not compile the validator with ${Platform.resolvedExecutable}: '
+          '${'${built.stderr}${built.stdout}'.trim()}',
+        );
+      }
+      try {
+        File(partial).renameSync(exe);
+      } on FileSystemException {
+        // Windows will not rename onto a file: another start put the same build there first.
+        if (!File(exe).existsSync()) rethrow;
+      }
+      return exe;
+    } finally {
+      staging.deleteSync(recursive: true);
     }
-    File(partial).renameSync(exe);
-    return exe;
   }
 }

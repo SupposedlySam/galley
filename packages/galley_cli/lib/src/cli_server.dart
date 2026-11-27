@@ -28,18 +28,20 @@ final class _Linked {
     final session = _signedIn(c, link.url);
     final server = PocketBase(c.client, link.url);
     final account = ServerAccount(server, session);
-    final member = (await account.memberships()).where((m) => m.galley == link.galley).firstOrNull;
-    if (member == null) {
-      throw Refused.missing(
-        '${session.email} is not a member of galley ${link.galley} on ${link.url}',
-      );
-    }
-    if (member.revoked) {
-      throw Refused.missing(
+    final member = switch (await account.standingIn(link.galley)) {
+      Joined(:final member) => member,
+      RevokedFrom() => throw Refused.missing(
         '${session.email}\'s access to galley ${link.galley} on ${link.url} was revoked by its '
         'owner',
-      );
-    }
+      ),
+      InvitedTo() => throw Refused.missing(
+        '${session.email} is invited to galley ${link.galley} on ${link.url}, and has not joined '
+        'it: `galley link ${link.url} --galley ${link.galley} --alias <your name>`',
+      ),
+      Outside() => throw Refused.missing(
+        '${session.email} is not a member of galley ${link.galley} on ${link.url}',
+      ),
+    };
     return _Linked(
       ServerGalley(server, galleyId: link.galley, session: session, now: c.now),
       member,
@@ -165,28 +167,27 @@ final class _Link extends _GalleyCommand {
       how = 'Made galley "$create" ($galleyId), which you own as $alias.';
     } else {
       galleyId = id!;
-      final mine = (await account.memberships()).where((m) => m.galley == galleyId).firstOrNull;
-      if (mine != null) {
-        if (mine.revoked) {
-          throw Refused.missing('your access to galley $galleyId was revoked by its owner');
-        }
-        how = 'You are ${mine.alias} in galley $galleyId.';
-      } else if (!(await account.invites()).contains(galleyId)) {
-        throw Refused.missing(
+      how = switch (await account.standingIn(galleyId)) {
+        Joined(:final member) => 'You are ${member.alias} in galley $galleyId.',
+        RevokedFrom() => throw Refused.missing(
+          'your access to galley $galleyId was revoked by its owner',
+        ),
+        Outside() => throw Refused.missing(
           '${session.email} is not a member of galley $galleyId on $url, and has no open '
           'invite to it',
-        );
-      } else if (alias == null) {
-        throw UsageException('you are invited to $galleyId: --alias <your name> joins it', usage);
-      } else {
-        await account.join(galleyId, alias: alias);
-        how = 'Joined galley $galleyId as $alias.';
-      }
+        ),
+        InvitedTo() when alias == null => throw UsageException(
+          'you are invited to $galleyId: --alias <your name> joins it',
+          usage,
+        ),
+        InvitedTo() => await _joined(account, galleyId, alias!),
+      };
     }
     ServerLink(url, galleyId).write(galley.path);
     c.out
       ..writeln(how)
-      ..writeln('Linked ${galley.path} to it on $url.');
+      ..writeln('Linked ${galley.path} to it on $url.')
+      ..writeln('Its canvas: ${canvasLink(url, galleyId)}');
     if (galley.marks().isNotEmpty) {
       // Said, not done: importing a local galley's marks is not built (D15), and they are not
       // lost. `galley unlink` brings them back.
@@ -363,7 +364,8 @@ final class _Invite extends _LinkedCommand {
     c.out
       ..writeln('Invited ${rest.single.trim().toLowerCase()} to galley ${l.galley}.')
       ..writeln(
-        'They run `galley login ${l.url} --email <theirs>`, then '
+        'They open ${canvasLink(l.url, l.galley)} and sign in with that email; or, with the '
+        'CLI, run `galley login ${l.url} --email <theirs>`, then '
         '`galley link ${l.url} --galley ${l.galley} --alias <their name>`.',
       );
     return 0;
@@ -426,4 +428,9 @@ final class _Revoke extends _LinkedCommand {
     );
     return 0;
   }
+}
+
+Future<String> _joined(ServerAccount account, String galleyId, String alias) async {
+  await account.join(galleyId, alias: alias);
+  return 'Joined galley $galleyId as $alias.';
 }

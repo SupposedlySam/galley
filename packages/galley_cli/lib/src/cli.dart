@@ -165,6 +165,33 @@ abstract class _GalleyCommand extends Command<int> {
     valueHelp: 'name',
   );
 
+  void addWeb() => argParser.addOption(
+    'web',
+    help:
+        'A built canvas to serve at /, in place of the release\'s. For working on the canvas '
+        'itself.',
+    valueHelp: 'dir',
+  );
+
+  /// `--web`'s build, else the pinned release's, from the cache or fetched into it.
+  Future<CanvasSource> canvasToServe() async {
+    if (_args.option('web') case final web?) {
+      if (!File('$web/index.html').existsSync()) {
+        throw Refused.invalid('$web has no index.html: give the canvas\'s build directory');
+      }
+      return CanvasAt(web);
+    }
+    final root = cacheDirectory(c.environment);
+    if (root == null) {
+      return const NoCanvas('there is nowhere to cache it: set GALLEY_CACHE, or HOME');
+    }
+    final (pin, cache) = (c.canvas, CanvasCache(root, fetch: c.fetch));
+    if (!File('${cache.directoryOf(pin)}/index.html').existsSync()) {
+      c.out.writeln('Fetching the canvas, ${pin.asset}, into $root (once)');
+    }
+    return cache.canvas(pin);
+  }
+
   /// Who is doing this, in a galley kept here.
   String get by {
     final by = _args.option('by') ?? c.environment['GALLEY_BY'];
@@ -505,20 +532,13 @@ final class _Withdraw extends _GalleyCommand {
 
 final class _Serve extends _GalleyCommand {
   _Serve(super.c) {
-    argParser
-      ..addOption(
-        'port',
-        defaultsTo: '$defaultPort',
-        help: 'The loopback port. 0 picks a free one.',
-        valueHelp: 'n',
-      )
-      ..addOption(
-        'web',
-        help:
-            'A built canvas to serve at /, in place of the release\'s. For working on the '
-            'canvas itself.',
-        valueHelp: 'dir',
-      );
+    argParser.addOption(
+      'port',
+      defaultsTo: '$defaultPort',
+      help: 'The loopback port. 0 picks a free one.',
+      valueHelp: 'n',
+    );
+    addWeb();
   }
 
   /// Fixed, so the canvas's address is the same every time and can be bookmarked. Rejected:
@@ -539,15 +559,16 @@ final class _Serve extends _GalleyCommand {
       // Rejected: serving the directory anyway. Its marks are not the server's, and the canvas
       // would show a galley that looks whole and is not.
       throw Refused.invalid(
-        'this galley is linked to ${l.url}, and `serve` shows a galley kept here. The canvas '
-        'on a server is not built yet; `galley unlink` serves this directory again',
+        'this galley is linked to ${l.url}, and `serve` shows a galley kept here. Its canvas is '
+        'on the server: ${canvasLink(l.url, l.galley)}. `galley unlink` serves this directory '
+        'again',
       );
     }
     final port = int.tryParse(_args.option('port')!);
     if (port == null || port < 0 || port > 65535) {
       throw UsageException('--port is 0 to 65535', usage);
     }
-    final canvas = await _canvas();
+    final canvas = await canvasToServe();
     final GalleyServer server;
     try {
       server = await GalleyServer.start(local, port: port, canvas: canvas);
@@ -568,25 +589,6 @@ final class _Serve extends _GalleyCommand {
     await c.untilStopped();
     await server.close();
     return 0;
-  }
-
-  /// `--web`'s build, else the pinned release's, from the cache or fetched into it.
-  Future<CanvasSource> _canvas() async {
-    if (_args.option('web') case final web?) {
-      if (!File('$web/index.html').existsSync()) {
-        throw Refused.invalid('$web has no index.html: give the canvas\'s build directory');
-      }
-      return CanvasAt(web);
-    }
-    final root = cacheDirectory(c.environment);
-    if (root == null) {
-      return const NoCanvas('there is nowhere to cache it: set GALLEY_CACHE, or HOME');
-    }
-    final (pin, cache) = (c.canvas, CanvasCache(root, fetch: c.fetch));
-    if (!File('${cache.directoryOf(pin)}/index.html').existsSync()) {
-      c.out.writeln('Fetching the canvas, ${pin.asset}, into $root (once)');
-    }
-    return cache.canvas(pin);
   }
 }
 
@@ -609,6 +611,7 @@ final class _Host extends _GalleyCommand {
         help: 'Make a user for this email, who can then make a galley and invite to it.',
         valueHelp: 'email',
       );
+    addWeb();
   }
 
   /// PocketBase's own default, and not `serve`'s, so the two can run at once.
@@ -645,10 +648,15 @@ final class _Host extends _GalleyCommand {
     c.out.writeln(
       'Starting PocketBase with Galley\'s schema (the first start fetches it into $cache)',
     );
+    final canvas = await canvasToServe();
     final server = await LocalServer.start(
       data: data,
       cache: ArchiveCache(cache, fetch: c.fetch),
       port: port,
+      canvas: switch (canvas) {
+        CanvasAt(:final directory) => directory,
+        NoCanvas() => null,
+      },
     );
     try {
       if (_args.option('owner') case final owner?) {
@@ -658,6 +666,19 @@ final class _Host extends _GalleyCommand {
       c.out
         ..writeln('Hosting $data at ${server.url}  (Ctrl-C stops it)')
         ..writeln('Sign-in codes are written to ${server.otpDirectory}');
+      if (canvas case NoCanvas(:final why)) {
+        // Said, as `serve` says it (DESIGN D14): the API answers, and the CLI works; a
+        // reviewer's link would open nothing.
+        c.err.writeln(
+          'galley: no canvas at ${server.url}: $why. The API is served; `--web <dir>` serves '
+          'a built canvas.',
+        );
+      } else {
+        c.out.writeln(
+          'The canvas is at ${server.url}; each galley\'s link is printed by '
+          '`galley link` and `galley invite`.',
+        );
+      }
       final stopped = await Future.any([
         c.untilStopped().then((_) => null),
         server.exitCode.then<int?>((code) => code),

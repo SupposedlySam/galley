@@ -42,12 +42,25 @@ A galley on a server (DESIGN D15, "The commands follow the galley"):
   `.galley/server.json`, which names the server and galley only. `galley unlink` removes it.
 - While linked, `mark`, `pull`, `answer`, `verify`, `reopen` and `withdraw` act on the server
   as your alias there. `--by` is refused and `GALLEY_BY` ignored. `pack` and `serve` are
-  refused: `galley push` renders a round and pushes it, and the canvas on a server is not
-  built yet.
+  refused: `galley push` renders a round and pushes it, and `serve` names the galley's canvas
+  on the server. One invited and not yet joined, with a link from a teammate's checkout, is
+  told how to join.
 - `galley push` renders into `.galley/push/` and pushes it. A push that stops keeps the render,
   and `galley push --resume` sends it without rendering again.
 - `galley invite <email>`, `galley members` and `galley revoke <alias> [--restore]`.
 - `package:http` is now a dependency.
+
+The canvas on a server (DESIGN D15, "The canvas is served by the server"):
+- `galley host` serves the canvas at its root, from the same origin as the API: the pinned
+  release's, from the cache, or `--web <dir>`. Without one it says why and serves the API.
+- `galley link` and `galley invite` print the galley's canvas, `<server>/?galley=<id>`.
+- The canvas (galley_web) at that address signs a reviewer in by the code the server mails,
+  joins an invited one under the alias they give, and opens the galley as them, their alias
+  shown and fixed, with a way to sign out. A revoked reviewer, or someone neither a member nor
+  invited, is told so. The sign-in is kept in the browser's `localStorage` and renewed on each
+  visit; a renewal the server refuses is said, and the kept sign-in is not cleared.
+- Two starts of `galley host` at once, in one process or two, each compile the validator in a
+  directory of their own; a name made of the pid alone was shared, and one start failed.
 
 ## 0.3.8
 

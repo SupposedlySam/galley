@@ -115,6 +115,33 @@ void main() {
   }
 
   group('members', () {
+    test('where a user stands: outside, invited, joined, revoked, and joined again', () async {
+      final owner = await signIn('stander-owner@example.com');
+      final id = await ServerAccount(pocketBase(), owner).create('Stand', alias: 'O');
+      final other = await ServerAccount(pocketBase(), owner).create('Other', alias: 'O');
+      final members = GalleyMembers(pocketBase(), galleyId: id, session: owner);
+      final user = await signIn('stander@example.com');
+      final account = ServerAccount(pocketBase(), user);
+      Future<String> of(String galley) async => switch (await account.standingIn(galley)) {
+        Joined(:final member) => 'joined ${member.alias}',
+        RevokedFrom(:final member) => 'revoked ${member.alias}',
+        InvitedTo() => 'invited',
+        Outside() => 'outside',
+      };
+      expect(await of(id), 'outside');
+      await members.invite('stander@example.com');
+      expect(await of(id), 'invited');
+      // An invite is to one galley: the owner's other one is still outside.
+      expect(await of(other), 'outside');
+      await account.join(id, alias: 'S');
+      expect(await of(id), 'joined S');
+      await members.setRevoked('S');
+      expect(await of(id), 'revoked S');
+      await members.setRevoked('S', revoked: false);
+      expect(await of(id), 'joined S');
+      expect(await of(other), 'outside');
+    });
+
     test(
       'a galley is made with its owner, who invites a reviewer, who joins it by the invite',
       () async {
@@ -440,19 +467,34 @@ void main() {
       expect((link as Map).keys, ['url', 'galley']);
       expect(File('${owner.app}/.galley/server.json').readAsStringSync(), isNot(contains('token')));
       final id = link['galley'] as String;
+      // The canvas is at the server's root, and the link names the galley (galley host).
+      final canvas = Uri.parse(url).replace(path: '/', queryParameters: {'galley': id});
+      expect('${owner.out}', contains('Its canvas: $canvas\n'));
 
       expect(await owner.run(['pack']), 1);
       expect('${owner.err}', contains('`galley push`'));
       expect(await owner.run(['serve']), 1);
-      expect('${owner.err}', contains('linked to'));
+      expect('${owner.err}', allOf(contains('linked to'), contains('on the server: $canvas.')));
 
       expect(await owner.run(['push']), 0, reason: '${owner.err}');
       expect('${owner.out}', contains('Round 1: 2 of 2 planned frames'));
       expect(Directory('${owner.app}/.galley/push').existsSync(), isFalse);
 
       expect(await owner.run(['invite', 'cli-rae@example.com']), 0, reason: '${owner.err}');
+      expect('${owner.out}', contains('They open $canvas and sign in with that email'));
       final rae = machine('rae');
       expect(await rae.run(['login', url, '--email', 'cli-rae@example.com']), 0);
+      // The link holds no token, so it may come from a teammate's checkout before Rae joins:
+      // the commands say how to join, not "not a member".
+      File('${rae.app}/.galley/server.json')
+        ..createSync(recursive: true)
+        ..writeAsStringSync(File('${owner.app}/.galley/server.json').readAsStringSync());
+      expect(await rae.run(['pull']), 1);
+      expect(
+        '${rae.err}',
+        allOf(contains('is invited to galley $id'), contains('--galley $id --alias <your name>')),
+      );
+      File('${rae.app}/.galley/server.json').deleteSync();
       expect(await rae.run(['link', url, '--galley', id]), 64);
       expect('${rae.err}', contains('--alias'));
       expect(
