@@ -4,13 +4,13 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
-## 0.3.10 (unreleased)
+## 0.3.10
 
 - The packer records each frame's `pixels`, a SHA-256 of its width, height and RGBA bytes, from
   the render it checked twice (`FramePixels.digest`), so a later round can say which frames
   changed (DESIGN D17). It depends on `crypto`. The round's files are otherwise the same.
 
-## 0.3.9 (unreleased)
+## 0.3.9
 
 - A widget's source location is recorded as a path inside the app's package
   (`lib/screens/home.dart`), not the absolute `file://` URI the compiler records. A round no

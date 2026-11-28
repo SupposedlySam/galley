@@ -4,13 +4,13 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.8, the local loop and its canvas.** Galley renders and records a round of frames
-from inside an app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local
+**Status: 0.3.10, the local loop, its canvas, and a server.** Galley renders and records a round of
+frames from inside an app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local
 galley: pack, mark, pull, answer, verify, with every mark carried into the next round. `galley
-serve` serves that galley on this machine, with the canvas, where its owner marks the round in
-a browser. A galley can also live on a Galley server, where reviewers sign in by a mailed code
-and mark it on the same canvas; `galley host` runs one on this machine, and hosting one for
-others is not built yet ([the plan](docs/ROADMAP.md)).
+serve` serves that galley on this machine, with the canvas, where its owner marks the round in a
+browser. A galley can also live on a Galley server, where reviewers sign in by a mailed code and
+mark it on the same canvas; `galley host` runs one on this machine, and hosting one for others is
+not built yet ([the plan](docs/ROADMAP.md)).
 
 | Package | What it is |
 |---|---|
@@ -29,7 +29,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.8
+      ref: v0.3.10
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -107,7 +107,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley_cli
-      ref: v0.3.8
+      ref: v0.3.10
 ```
 
 Add `.galley/` to `.gitignore`. Otherwise the earlier rounds make every later round look as if

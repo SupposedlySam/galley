@@ -4,7 +4,7 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
-## 0.3.10 (unreleased)
+## 0.3.10
 
 What changed since a reviewer's last visit (DESIGN D17):
 - `FrameRecord.pixels`: the SHA-256, in lower-case hex, of the frame's pixels, set by the
@@ -26,7 +26,7 @@ What changed since a reviewer's last visit (DESIGN D17):
   JSON is `{latest_round, items, damaged}`; `GalleyMarks.fromJson` reads it back and requires
   `damaged`. Not breaking under D8: an app's host does not implement or call `Galley`.
 
-## 0.3.9 (unreleased)
+## 0.3.9
 
 - `raiseTarget`: the widget a new mark pins in a round's frame, and where on it, or the refusal
   of the mark (no such frame, no tree, a miss, a blank note, nobody raising it). Every

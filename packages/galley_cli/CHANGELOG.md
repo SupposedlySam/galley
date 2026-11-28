@@ -4,7 +4,7 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
-## 0.3.10 (unreleased)
+## 0.3.10
 
 - `galley pull --json` gives each mark's `raised_in`, the round it was raised on, beside
   `round`, where it was last placed. On this machine it is the first round whose placements
@@ -37,7 +37,7 @@ What changed since your last visit (DESIGN D17):
   {"round", "by"}` records one and gives the round opened before. The canvas records it when
   the round is shown and you are named (`?by=`, or the name field on Enter).
 
-## 0.3.9 (unreleased)
+## 0.3.9
 
 A Galley server on this machine (DESIGN D15):
 - `galley host` runs PocketBase 0.40.6 with `galley_server`'s schema and hooks, on loopback.

@@ -4,7 +4,7 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
-## 0.3.10 (unreleased)
+## 0.3.10
 
 - A `visits` collection: each member's last round opened and the one before it, read and
   written only by the member, judged by `galley_validate` (`visit`), one row per member
@@ -20,7 +20,7 @@ patch (DESIGN D8).
 - `RoundPush.push` refuses while a mark is damaged before it creates the round, not only at
   the finish, so it no longer leaves an unfinished round standing that the finish refused.
 
-## 0.3.9 (unreleased)
+## 0.3.9
 
 The first release of the package (DESIGN D15):
 - `judge`, over `galley_core`: whether a write to a Galley server may say what it says. A mark
