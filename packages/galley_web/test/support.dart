@@ -35,11 +35,14 @@ FrameRecord recordOf(
   String? tree,
   String? image,
   String? pixels,
+  String? screenName,
+  Uri? uri,
 }) => FrameRecord(
   key: key,
   scenario: key.values['scenario']!,
-  uri: Uri.parse('/${key.values['screen']}'),
-  landing: LandedAt(Uri.parse('/${key.values['screen']}')),
+  uri: uri ?? Uri.parse('/${key.values['screen']}'),
+  landing: LandedAt(uri ?? Uri.parse('/${key.values['screen']}')),
+  screenName: screenName,
   status: FrameStatus.rendered,
   device: on,
   essential: true,
@@ -48,13 +51,23 @@ FrameRecord recordOf(
   pixels: pixels,
 );
 
-/// A frame of [screen] on [on], with no tree.
+/// A frame of [screen] on [on], with no tree, named [screenName] by the host when given.
 RoundFrame frameOf(
   String screen,
   DeviceProfile on, {
   String scenario = 'base',
   Map<String, String> more = const {},
-}) => RoundFrame(recordOf(keyOf(screen, on, scenario: scenario, more: more), on), null);
+  String? screenName,
+  Uri? uri,
+}) => RoundFrame(
+  recordOf(
+    keyOf(screen, on, scenario: scenario, more: more),
+    on,
+    screenName: screenName,
+    uri: uri,
+  ),
+  null,
+);
 
 /// The root and one button, at (20, 300) and 371 × 52, in every frame's tree.
 const buttonRect = LogicalRect(20, 300, 371, 52);

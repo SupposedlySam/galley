@@ -72,6 +72,14 @@ void main() {
     }
   });
 
+  test("a named screen's frames carry its name, and the others none", () {
+    final records = [for (final p in _listed(out)) record(p)];
+    expect(records.where((r) => r.uri.path == '/home'), hasLength(2));
+    for (final r in records) {
+      expect(r.screenName, r.uri.path == '/home' ? 'Home' : isNull, reason: '${r.key}');
+    }
+  });
+
   test('every frame with an image has a digest of its pixels, and frames that look different '
       'have different ones', () {
     final records = [for (final p in _listed(out)) record(p)];

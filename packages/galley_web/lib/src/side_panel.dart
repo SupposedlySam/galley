@@ -179,7 +179,7 @@ class MarkList extends StatelessWidget {
             ),
           const Divider(height: 16),
         ],
-        SinceSection(model: model, onShow: onShow),
+        SinceSection(model: model, board: shown.board, onShow: onShow),
         const Divider(height: 16),
         if (queue.isNotEmpty || damaged.isNotEmpty) heading('Every mark'),
         if (shown.marks.isEmpty && damaged.isEmpty)
@@ -240,10 +240,13 @@ String _whole(String commit) => commit;
 /// counted as the same (DESIGN: an unknown is never nothing).
 class SinceSection extends StatelessWidget {
   /// The section of [model]'s visit.
-  const SinceSection({super.key, required this.model, required this.onShow});
+  const SinceSection({super.key, required this.model, required this.board, required this.onShow});
 
   /// Whose visit.
   final CanvasModel model;
+
+  /// The round's board, which names its frames.
+  final Board board;
 
   /// Moves the board to a frame.
   final void Function(FrameKey frame) onShow;
@@ -290,7 +293,7 @@ class SinceSection extends StatelessWidget {
                 key: ValueKey('since ${c.key}'),
                 dense: true,
                 leading: Icon(_icon(c), size: 18),
-                title: Text(Board.nameOf(c.key)),
+                title: Text(board.nameOf(c.key)),
                 subtitle: Text(switch (c) {
                   FrameAdded() => 'new',
                   FrameChanged() => 'changed',

@@ -17,6 +17,7 @@ FrameRecord _record({
   findings: [
     Finding(kind: 'frozen', message: 'still animating', rect: const LogicalRect(1, 2, 3, 4)),
   ],
+  screenName: 'Home',
   image: 'frames/x.png',
   pixels: _digest,
   tree: 'trees/x.json',
@@ -39,6 +40,20 @@ void main() {
       expect(back.findings.single.rect, const LogicalRect(1, 2, 3, 4));
       expect(back.device.provenance, Provenance.assumed);
       expect(back.pixels, _digest);
+      expect(back.screenName, 'Home');
+    });
+
+    test('a screen name is optional, and refused when it is blank', () {
+      final older = _record().toJson()..remove('screen_name');
+      expect(FrameRecord.fromJson(older, 'r').screenName, isNull, reason: 'packed before 0.3.12');
+      expect(FrameRecord.fromJson(older, 'r').toJson(), isNot(contains('screen_name')));
+      for (final bad in ['', '  ']) {
+        expect(
+          () => FrameRecord.fromJson(_record().toJson()..['screen_name'] = bad, 'r'),
+          throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('blank'))),
+          reason: '"$bad"',
+        );
+      }
     });
 
     test('a digest of pixels is read when there is none, and refused when it cannot be one', () {

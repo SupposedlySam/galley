@@ -14,22 +14,25 @@ import 'package:galley_core/galley_core.dart';
 ///
 /// Pure: the canvas draws it and a test reads it, with no renderer in between.
 final class Board {
-  Board._(this.rows, this.width, this.height, this.varying);
+  Board._(this.rows, this.width, this.height, this.varying, this._names);
 
   /// The board for [frames], in the round's order.
   factory Board.of(List<RoundFrame> frames) {
     final varying = _varying(frames);
+    // Grouped by id, named for a reviewer: two screens the host gave one name stay two columns.
     final rows = <String, Map<String, List<RoundFrame>>>{};
+    final names = <FrameKey, String>{};
     for (final f in frames) {
       final key = f.record.key;
       rows.putIfAbsent(flowOf(key), () => {}).putIfAbsent(_stateOf(key), () => []).add(f);
+      names[key] = _nameOf(key, f.record);
     }
     var top = 0.0, width = 0.0;
     final laid = <BoardRow>[];
     for (final MapEntry(key: flow, value: states) in rows.entries) {
       var left = 0.0, tallest = 0.0;
       final columns = <BoardColumn>[];
-      for (final MapEntry(key: state, value: cell) in states.entries) {
+      for (final cell in states.values) {
         final tilesTop = top + rowLabel + columnLabel;
         var x = left;
         final tiles = <BoardTile>[];
@@ -47,19 +50,31 @@ final class Board {
           if (h > tallest) tallest = h;
         }
         final right = x - tileGap;
-        columns.add(BoardColumn(state, LogicalRect(left, top + rowLabel, right - left, 0), tiles));
+        final first = cell.first.record;
+        columns.add(
+          BoardColumn(
+            _stateName(first.key, first),
+            LogicalRect(left, top + rowLabel, right - left, 0),
+            tiles,
+          ),
+        );
         left = right + columnGap;
       }
       final height = rowLabel + columnLabel + tallest;
       laid.add(
-        BoardRow(flow, LogicalRect(0, top, left - columnGap, height), [
-          for (final c in columns)
-            BoardColumn(
-              c.state,
-              LogicalRect(c.rect.left, c.rect.top, c.rect.width, height - rowLabel),
-              c.tiles,
-            ),
-        ]),
+        BoardRow(
+          flow,
+          _flowName(flow, [for (final c in states.values) ...c]),
+          LogicalRect(0, top, left - columnGap, height),
+          [
+            for (final c in columns)
+              BoardColumn(
+                c.state,
+                LogicalRect(c.rect.left, c.rect.top, c.rect.width, height - rowLabel),
+                c.tiles,
+              ),
+          ],
+        ),
       );
       if (left - columnGap > width) width = left - columnGap;
       top += height + rowGap;
@@ -69,6 +84,7 @@ final class Board {
       width,
       laid.isEmpty ? 0 : top - rowGap,
       List.unmodifiable(varying),
+      Map.unmodifiable(names),
     );
   }
 
@@ -125,16 +141,46 @@ final class Board {
   };
 
   /// [key] as a reviewer reads it, off the board: its state, as a column is headed, then the
-  /// value of every other axis, by the axis's name. Rejected: the key's own order, which sorts
-  /// the axes by name and so put the device before the screen.
-  static String nameOf(FrameKey key) => [
-    _stateOf(key),
+  /// value of every other axis, by the axis's name. A frame the board lacks (one gone since a
+  /// visit) has no record to name its screen, so it is named by its id. Rejected: the key's own
+  /// order, which sorts the axes by name and so put the device before the screen.
+  String nameOf(FrameKey key) => _names[key] ?? _nameOf(key, null);
+
+  final Map<FrameKey, String> _names;
+
+  static String _nameOf(FrameKey key, FrameRecord? record) => [
+    _stateName(key, record),
     for (final MapEntry(:key, :value) in key.values.entries)
       if (!_stateAxes.contains(key)) value,
   ].join(' · ');
 
+  /// The column [key]'s frame is in, by id: what groups it.
   static String _stateOf(FrameKey key) =>
       [?key.values['screen'], ?key.values['scenario']].join(' · ');
+
+  /// The column's heading: the screen as the reviewer knows it, then the scenario.
+  static String _stateName(FrameKey key, FrameRecord? record) => [
+    if (key.values['screen'] case final id?) record == null ? id : screenName(record),
+    ?key.values['scenario'],
+  ].join(' · ');
+
+  /// What a reviewer calls [record]'s screen: the name the app gave it, or `home` for the app's
+  /// root, or its id. Not `root`, the id of `/`: that is the router's word, not the reviewer's.
+  /// Only the uri `/` is `home`; a route `/root` keeps its id.
+  static String screenName(FrameRecord record) =>
+      record.screenName ??
+      (record.uri.pathSegments.every((s) => s.isEmpty) && !record.uri.hasQuery
+          ? 'home'
+          : record.key.values['screen'] ?? '(no screen)');
+
+  /// A row's heading: the name of the screen whose id is the flow's (`/bloom` for `bloom`),
+  /// when the row has it, or the flow's id.
+  static String _flowName(String flow, List<RoundFrame> frames) {
+    for (final f in frames) {
+      if (f.record.key.values['screen'] == flow) return screenName(f.record);
+    }
+    return flow;
+  }
 
   static List<String> _varying(List<RoundFrame> frames) {
     final values = <String, Set<String>>{};
@@ -166,10 +212,13 @@ final class Board {
 /// One flow: its states left to right.
 final class BoardRow {
   /// A row.
-  const BoardRow(this.flow, this.rect, this.columns);
+  const BoardRow(this.flow, this.name, this.rect, this.columns);
 
-  /// The flow's name.
+  /// The flow's id: the first segment of its screens' ids.
   final String flow;
+
+  /// What its heading says ([Board.screenName] of its root screen, or [flow]).
+  final String name;
 
   /// Where it is, label included.
   final LogicalRect rect;
@@ -183,7 +232,8 @@ final class BoardColumn {
   /// A column.
   const BoardColumn(this.state, this.rect, this.tiles);
 
-  /// The screen and scenario it shows, such as `bloom.staff · batchSetup`.
+  /// The screen as the reviewer knows it, and the scenario, such as `bloom.staff · batchSetup`
+  /// or, with the screen named, `Packing · batchSetup`.
   final String state;
 
   /// Where it is, label included.

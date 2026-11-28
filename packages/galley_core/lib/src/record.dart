@@ -148,6 +148,7 @@ final class FrameRecord {
     required this.essential,
     List<String> errors = const [],
     List<Finding> findings = const [],
+    this.screenName,
     this.image,
     this.pixels,
     this.tree,
@@ -165,6 +166,9 @@ final class FrameRecord {
     }
     if (digest != null && !_sha256.hasMatch(digest)) {
       throw ArgumentError.value(digest, 'pixels', 'is not a SHA-256 in lower-case hex');
+    }
+    if (screenName case final n? when n.trim().isEmpty) {
+      throw ArgumentError('frame $key: a screen name that is blank');
     }
   }
 
@@ -190,6 +194,7 @@ final class FrameRecord {
             e is String ? e : throw FormatException('$context.errors[$i]: expected a string'),
         ],
         findings: r.readList('findings', Finding.fromJson),
+        screenName: r.optionalString('screen_name'),
         image: r.optionalString('image'),
         pixels: r.optionalString('pixels'),
         tree: r.optionalString('tree'),
@@ -226,6 +231,13 @@ final class FrameRecord {
   /// What a reviewer should know.
   final List<Finding> findings;
 
+  /// What the app calls the screen for its reviewers (`GalleyHost.screenNames` in galley), or
+  /// null when it names none. Shown, never matched on: the frame's identity is [key], whose
+  /// `screen` is the uri's id, so naming a screen, or renaming it, carries every mark on it
+  /// forward. Rejected: putting the name in the key, which would retire every mark on a screen
+  /// the day it is named. Null too in a round packed before 0.3.12, which did not record it.
+  final String? screenName;
+
   /// The PNG, relative to the round directory. Null when nothing could be captured.
   final String? image;
 
@@ -254,6 +266,7 @@ final class FrameRecord {
     'essential': essential,
     'errors': errors,
     'findings': [for (final f in findings) f.toJson()],
+    if (screenName != null) 'screen_name': screenName,
     if (image != null) 'image': image,
     if (pixels != null) 'pixels': pixels,
     if (tree != null) 'tree': tree,

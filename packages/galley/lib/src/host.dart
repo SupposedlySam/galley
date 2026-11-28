@@ -25,6 +25,18 @@ abstract class GalleyHost {
   /// others. Empty means the app has no variant axis.
   List<String> get variants => const [];
 
+  /// What reviewers call the app's screens, by the uri a scenario lists: `{Uri.parse('/bloom'):
+  /// 'The Batch'}`. A screen left out is shown by its id, and `/` as `home`.
+  ///
+  /// A name is shown, never matched on. A frame is known across rounds by its screen's id,
+  /// which comes from the uri (`screenId`), so a screen can be named, or renamed, without a
+  /// mark on it losing its frame. A screen whose id is its area's (`/bloom` for `bloom`) names
+  /// the area too. Rejected: renaming the app's routes for reviewers, which changes every id.
+  ///
+  /// Each uri must be one a scenario lists, and each name must not be blank; otherwise the
+  /// round is refused, naming the uri, since a misspelt uri would name nothing.
+  Map<Uri, String> get screenNames => const {};
+
   /// The built-in axes and the values this app declares for them.
   GalleyAxes get axes => GalleyAxes();
 
@@ -99,6 +111,7 @@ final class GalleyFrame {
     required this.uri,
     required this.essential,
     this.variant,
+    this.screenName,
   });
 
   /// Its identity across rounds (DESIGN D5).
@@ -109,6 +122,9 @@ final class GalleyFrame {
 
   /// The screen it shows.
   final Uri uri;
+
+  /// What reviewers call its screen ([GalleyHost.screenNames]), or null when it is not named.
+  final String? screenName;
 
   /// The variant, or null when the app has none.
   final String? variant;

@@ -25,6 +25,14 @@ List<GalleyFrame> deriveFrames(GalleyHost host, BuiltInAxes builtIn) {
     }
   }
 
+  final names = host.screenNames;
+  for (final MapEntry(key: uri, value: name) in names.entries) {
+    if (!idsSeen.containsValue(uri)) {
+      throw ArgumentError('screenNames names $uri, which no scenario shows');
+    }
+    if (name.trim().isEmpty) throw ArgumentError('screenNames gives $uri a blank name');
+  }
+
   final axes = [
     ...builtIn.frameAxes,
     if (host.variants.isNotEmpty) FrameAxis('variant', host.variants),
@@ -41,6 +49,7 @@ List<GalleyFrame> deriveFrames(GalleyHost host, BuiltInAxes builtIn) {
         uri: uri,
         variant: key['variant'],
         essential: planned.essential,
+        screenName: names[uri],
       ),
     );
   }

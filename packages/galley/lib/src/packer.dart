@@ -138,6 +138,7 @@ Future<FrameRecord> _renderTwice(
     essential: frame.essential,
     errors: errors,
     findings: first.findings,
+    screenName: frame.screenName,
     image: image,
     pixels: image == null ? null : first.pixels!.digest,
     tree: tree,

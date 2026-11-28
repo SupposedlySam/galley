@@ -15,6 +15,9 @@ class ToyRoundHost extends GalleyHost {
   ];
 
   @override
+  Map<Uri, String> get screenNames => {Uri.parse('/home'): 'Home'};
+
+  @override
   GalleyAxes get axes => GalleyAxes(textScales: [1.0], brightness: [Brightness.light]);
 
   @override
