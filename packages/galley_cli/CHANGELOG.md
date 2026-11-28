@@ -4,6 +4,11 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.12 (unreleased)
+
+- A bundle's Dockerfile names its Debian base by digest, not by the tag alone, so a server
+  rebuilt from the same bundle runs on the same system (DESIGN D18).
+
 ## 0.3.11
 
 Hosting (ROADMAP step 8, DESIGN D18, docs/HOSTING.md):

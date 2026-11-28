@@ -196,7 +196,16 @@ void main() {
       'canvas': 'a build',
       'made': '2026-11-27T12:00:00.000Z',
     });
-    expect(File('$to/Dockerfile').readAsStringSync(), contains('CMD ["/galley/run"]'));
+    final docker = File('$to/Dockerfile').readAsStringSync();
+    expect(docker, contains('CMD ["/galley/run"]'));
+    // Its base is pinned by digest: one FROM, naming the image by its sha256.
+    expect(
+      [
+        for (final l in docker.split('\n'))
+          if (l.startsWith('FROM ')) l,
+      ],
+      [matches(RegExp(r'^FROM debian:bookworm-slim@sha256:[0-9a-f]{64}$'))],
+    );
   });
 
   group('refuses', () {

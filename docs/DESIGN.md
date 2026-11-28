@@ -941,6 +941,8 @@ validator. Only where it runs, and who it mails, change.
 - *Mutation, 2026-11-27:* 13 mutants of the hooks: each setting dropped, each check of a bad
   setting skipped, owners not lower-cased, made for anyone or for nobody, and the operator's
   hook not called. One more of `run`, with `GALLEY_VALIDATE` not exported. All are killed.
-- **Not built:** pinning the Dockerfile's base image by digest; a bundle for arm64 checked by
-  running it; a backup beyond the host's snapshots of the volume; and turning off the
+- **The Dockerfile's base is pinned by digest** (`debianDigest`, bundle.dart), as PocketBase
+  and the canvas are pinned by hash: a tag moves, and a rebuilt server would run on another
+  system. Added 2026-11-27, after 0.3.11 shipped the tag alone.
+- **Not built:** a bundle for arm64 checked by running it; a backup beyond the host's snapshots of the volume; and turning off the
   dashboard at `/_/`, which a superuser's password guards.

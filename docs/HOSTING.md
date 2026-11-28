@@ -150,7 +150,6 @@ fly ssh console -C '/galley/pocketbase superuser upsert you@example.com <passwor
 
 ## What is not done
 
-- The Dockerfile's base image is not pinned by digest.
 - A bundle for arm64 is written but has not been run.
 - Backups are Fly's daily snapshots of the volume, and nothing else.
 - The dashboard cannot be turned off.

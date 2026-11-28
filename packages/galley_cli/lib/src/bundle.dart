@@ -107,9 +107,18 @@ String runScript() {
 /// The bundle's `Dockerfile`. Debian, not Alpine: the validator is a Dart executable linked
 /// against glibc, which Alpine has not. ca-certificates, so the mailer can check its relay's
 /// certificate.
-const dockerfile = '''
+///
+/// The base image is pinned by digest, as PocketBase and the canvas are pinned by hash: a tag
+/// moves, and a server rebuilt from the same bundle would run on another system. The digest is
+/// the multi-platform index, so it serves both [linuxPlatforms]. Observed 2026-11-27 from
+/// registry-1.docker.io, `library/debian` `bookworm-slim`: the index lists linux/amd64 and
+/// linux/arm64/v8. Rejected: the tag alone, the first bundle's choice.
+const debianDigest = 'sha256:e67eeead736ff7bbe258ef088bff683635c561b1fcfefad0806c1df4ab49ce0e';
+
+const dockerfile =
+    '''
 # A Galley server, written by `galley bundle` (docs/HOSTING.md).
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@$debianDigest
 RUN apt-get update \\
  && apt-get install -y --no-install-recommends ca-certificates \\
  && rm -rf /var/lib/apt/lists/*
