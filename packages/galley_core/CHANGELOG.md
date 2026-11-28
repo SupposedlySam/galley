@@ -4,6 +4,12 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.12
+
+- `FrameRecord.screenName`: what the app calls the frame's screen, for reviewers. Shown, never
+  matched on: the frame key is unchanged, so naming or renaming a screen loses no mark. Optional
+  (`screen_name`), absent in rounds packed before 0.3.12, and refused when blank.
+
 ## 0.3.11
 
 - No changes. Released with `galley_cli` 0.3.11 (DESIGN D8).

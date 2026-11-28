@@ -4,8 +4,23 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
-## 0.3.12 (unreleased)
+## 0.3.12
 
+The canvas (galley_web), from the first adopter's first look:
+- Zoomed out, a click on a frame opens it at full size, as "Show on board" does; only a click on
+  an open frame raises a mark. A frame too small to mark outlines no widget, and shows a zoom
+  cursor.
+- Zoomed out, each frame is named across its top (its screen, state and what else sets it
+  apart), and whole on hover.
+- The widgets under a click that fill one box are offered as one choice, led by what is on
+  screen (its label, or else its key, and a kind such as "text field" or "button"), with their
+  types and size below. A mark on it is pinned to the deepest of them, as before.
+- Screens are shown by the names the host gives them (`GalleyHost.screenNames`), and `/` as
+  `home`, in flow headings, column labels and the list of frames since your last visit. Frames
+  are still grouped by screen id, so two screens of one name stay apart.
+- The canvas pinned is 0.3.12's.
+
+Hosting:
 - A bundle's Dockerfile names its Debian base by digest, not by the tag alone, so a server
   rebuilt from the same bundle runs on the same system (DESIGN D18).
 - `galley bundle` says to deploy as docs/HOSTING.md does: a fly.toml in the bundle, and

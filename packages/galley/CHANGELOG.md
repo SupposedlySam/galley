@@ -4,6 +4,13 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.12
+
+- `GalleyHost.screenNames`: what reviewers call the app's screens, by the uri a scenario lists,
+  such as `{Uri.parse('/bloom'): 'The Batch'}`. The packer records each in its frames'
+  `screen_name`; frame keys do not change. A uri no scenario lists, or a blank name, refuses
+  the round, naming the uri. `GalleyFrame.screenName` carries it to `mount`.
+
 ## 0.3.11
 
 - No changes. Released with `galley_cli` 0.3.11 (DESIGN D8).

@@ -4,7 +4,7 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.11, the local loop, its canvas, and a server.** Galley renders and records a round of
+**Status: 0.3.12, the local loop, its canvas, and a server.** Galley renders and records a round of
 frames from inside an app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local
 galley: pack, mark, pull, answer, verify, with every mark carried into the next round. `galley
 serve` serves that galley on this machine, with the canvas, where its owner marks the round in a
@@ -29,7 +29,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.11
+      ref: v0.3.12
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -107,7 +107,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley_cli
-      ref: v0.3.11
+      ref: v0.3.12
 ```
 
 Add `.galley/` to `.gitignore`. Otherwise the earlier rounds make every later round look as if
@@ -136,16 +136,23 @@ app's owner and for tests. A mark is never deleted: whoever raised one takes it 
 `galley serve` serves the galley on `http://localhost:7340/` (`--port` to change it) until
 Ctrl-C: the rounds' files, every mark, and new marks and events through the same checks as the
 commands (DESIGN D13). It listens on loopback only. At `/` is the canvas: open
-`http://localhost:7340/?by=<your name>`, click a widget on a frame to mark it, and answer,
-verify or reopen in its thread. Above the marks, the answers waiting on you are listed, the
+`http://localhost:7340/?by=<your name>`. Zoomed out, each frame is named across its top, and
+a click opens it; on an open frame, click a widget to mark it (widgets filling one box are
+offered as one, by what is on screen), and answer, verify or reopen in its thread. Screens are
+shown by the names the host gives them (`GalleyHost.screenNames`), `/` as `home`. Above the marks, the answers waiting on you are listed, the
 oldest first. Each one's thread shows the widget as you marked it beside the same widget now,
 and "Looks right" or "Not yet" moves on to the next (DESIGN D16). Above those, the frames new
 or changed since the round you opened before are listed and marked on the board (DESIGN D17);
-`serve` keeps each reviewer's last visit in `.galley/visits.json`. The canvas is a build attached to the release, fetched once
+`serve` keeps each reviewer's last visit in `.galley/visits.json`. The canvas is a build
+attached to the release, fetched once
 into a cache outside the app (`GALLEY_CACHE`, else the user cache directory) and checked
 against the hash this release pins before it is unpacked (DESIGN D14). With no network on the
 first start, `serve` says there is no canvas and serves the API. `--web <dir>` serves another
 build.
+
+The canvas draws with WebGL. Headless Chrome, as a script checking it runs, has none unless it
+is started with `--enable-unsafe-swiftshader` (software WebGL); without it the page stays
+blank.
 
 ### A galley on a server
 

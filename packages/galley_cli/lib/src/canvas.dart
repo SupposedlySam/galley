@@ -8,8 +8,8 @@ import 'pinned.dart';
 /// A release that does not change the canvas keeps the old pin, so [version] is the release
 /// the canvas was last built in, not necessarily this package's.
 const pinnedCanvas = PinnedCanvas(
-  version: '0.3.10',
-  sha256: '1a7fc1911135849f04769438e1480ab31e96ec08a6a95dcc8a7b1a236eb4b68a',
+  version: '0.3.12',
+  sha256: '97b1586dd30a3b10920a3b860e905d57dfdbcd28180786e78c312326a05b13a7',
 );
 
 /// A canvas build, by the release it is attached to and its archive's SHA-256.

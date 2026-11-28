@@ -1,6 +1,6 @@
 name: galley_server
 description: "What speaks a Galley server's language: its schema and hooks, the validator they call, and the client the CLI and the canvas share. Pure Dart."
-version: 0.3.11
+version: 0.3.12
 repository: https://github.com/SupposedlySam/galley/tree/main/packages/galley_server
 issue_tracker: https://github.com/SupposedlySam/galley/issues
 topics: [design, review]
