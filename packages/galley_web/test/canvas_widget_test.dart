@@ -6,6 +6,7 @@ import 'package:galley_web/src/board_view.dart';
 import 'package:galley_web/src/canvas_model.dart';
 import 'package:galley_web/src/compare.dart';
 import 'package:galley_web/src/frame_tile.dart';
+import 'package:galley_web/src/widget_choice.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'support.dart';
@@ -193,6 +194,43 @@ void main() {
     });
   });
 
+  group('zoomed out, a frame', () {
+    testWidgets('opens on a click, and raises nothing', (tester) async {
+      final api = apiOf();
+      await pumpCanvas(tester, api);
+      expect(boardOf(tester).scale, lessThan(BoardViewState.thumbnailBelow));
+
+      // Where the composer test's button is, in the fitted home tile.
+      await tester.tap(find.byType(FrameTile).first);
+      await tester.pump();
+
+      expect(find.byType(AlertDialog), findsNothing, reason: 'no composer');
+      expect(api.marksById, isEmpty);
+      expect(boardOf(tester).scale, 1.0, reason: 'shown as "Show on board" shows it');
+      final home = tiles(tester).singleWhere((t) => t.tile.frame.record.key == _home);
+      expect((home.thumbnail, home.markable), (false, true));
+    });
+
+    testWidgets('is named across its top, whole on hover, and not once it is large', (
+      tester,
+    ) async {
+      final model = await pumpCanvas(tester, apiOf());
+      final board = (model.state as Shown).board;
+      final names = [for (final k in _keys) board.nameOf(k)];
+      expect(names.first, 'home · base · pixel-7');
+
+      for (final name in names) {
+        expect(onTiles(find.text(name)), findsOneWidget, reason: name);
+        expect(find.byTooltip(name), findsOneWidget, reason: name);
+      }
+      expect(tiles(tester).map((t) => t.markable), everyElement(isFalse));
+
+      await showFrame(tester, _home);
+      expect(onTiles(find.text(names.first)), findsNothing);
+      expect(find.byTooltip(names.first), findsNothing);
+    });
+  });
+
   testWidgets('a click on a frame offers every widget under it, deepest first, and raises', (
     tester,
   ) async {
@@ -205,10 +243,11 @@ void main() {
     await tester.tapAt(tile + const Offset(Board.bezel + 205, Board.tileLabel + Board.bezel + 326));
     await tester.pump();
 
-    final radios = tester.widgetList<RadioListTile<WidgetNode>>(
-      find.byType(RadioListTile<WidgetNode>),
+    final radios = tester.widgetList<RadioListTile<WidgetChoice>>(
+      find.byType(RadioListTile<WidgetChoice>),
     );
-    expect(radios.map((r) => r.value.type), ['FilledButton', 'App']);
+    expect(radios.map((r) => r.value.node.type), ['FilledButton', 'App']);
+    expect(find.text('key add · button'), findsOneWidget, reason: 'led by what tells it apart');
 
     await tester.enterText(
       find.widgetWithText(TextField, 'What is wrong, or what should change'),
@@ -442,7 +481,13 @@ void main() {
       expect(onTiles(find.text('new')), findsNWidgets(2));
       expect(find.byKey(ValueKey('since $_home')), findsNothing, reason: 'the same says nothing');
 
-      await tester.tap(find.text('coffees · base · pixel-7'));
+      // The list's entry: the thumbnail is named the same.
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey('since')),
+          matching: find.text('coffees · base · pixel-7'),
+        ),
+      );
       await tester.pump();
       expect(boardOf(tester).scale, closeTo(1, 0.01), reason: 'shown at full size');
     });

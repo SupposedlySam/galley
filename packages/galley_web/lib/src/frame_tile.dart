@@ -9,7 +9,8 @@ import 'composer.dart';
 import 'marks.dart';
 
 /// One frame in its device's outline, with its caption above, its marks pinned to it, and the
-/// widget under the cursor outlined. A click raises a mark there.
+/// widget under the cursor outlined. A click raises a mark there, once the frame is drawn large
+/// enough to see ([markable]); before that it opens the frame.
 ///
 /// The frame's screen is drawn at its logical size, so a point in it is a point in the frame's
 /// tree with no conversion: the board's zoom is the [InteractiveViewer]'s, outside it.
@@ -22,6 +23,8 @@ class FrameTile extends StatefulWidget {
     required this.shown,
     required this.scale,
     required this.thumbnail,
+    required this.markable,
+    required this.onOpen,
   });
 
   /// Which frame, and where.
@@ -38,6 +41,13 @@ class FrameTile extends StatefulWidget {
 
   /// Whether it is drawn small: its image decoded small, and its mark count shown large.
   final bool thumbnail;
+
+  /// Whether a click raises a mark. When it does not, the frame outlines no widget, and a click
+  /// calls [onOpen].
+  final bool markable;
+
+  /// Shows the frame large enough to mark.
+  final VoidCallback onOpen;
 
   @override
   State<FrameTile> createState() => _FrameTileState();
@@ -143,6 +153,7 @@ class _FrameTileState extends State<FrameTile> {
 
   Widget _screen(List<PlacedMark> pins, int waiting) {
     final record = _record;
+    final name = widget.shown.board.nameOf(record.key);
     if (record.status == FrameStatus.error) {
       return _Card(
         title: 'This frame did not render',
@@ -152,12 +163,18 @@ class _FrameTileState extends State<FrameTile> {
     }
     final image = record.image;
     final tree = _frame.tree;
-    return MouseRegion(
-      cursor: tree == null ? MouseCursor.defer : SystemMouseCursors.precise,
-      onHover: (e) => _hover(tree?.deepestAt(e.localPosition.dx, e.localPosition.dy)),
+    final markable = widget.markable;
+    final screen = MouseRegion(
+      cursor: !markable
+          ? SystemMouseCursors.zoomIn
+          : tree == null
+          ? MouseCursor.defer
+          : SystemMouseCursors.precise,
+      onHover: (e) =>
+          _hover(markable ? tree?.deepestAt(e.localPosition.dx, e.localPosition.dy) : null),
       onExit: (_) => _hover(null),
       child: GestureDetector(
-        onTapUp: (e) => _tap(context, tree, e.localPosition),
+        onTapUp: (e) => markable ? _tap(context, tree, e.localPosition) : widget.onOpen(),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -179,7 +196,9 @@ class _FrameTileState extends State<FrameTile> {
                   color: const Color(0xFF5A2A2A),
                 ),
               ),
-            if (_hovered case final node?) _Outline(node, scale: widget.scale),
+            if (_hovered case final node? when markable) _Outline(node, scale: widget.scale),
+            if (widget.thumbnail)
+              _Name(name, scale: widget.scale, fitting: widget.tile.screen.width),
             if (widget.thumbnail && waiting > 0)
               Center(
                 child: _Count(waiting, scale: widget.scale, fitting: widget.tile.screen.width),
@@ -203,6 +222,8 @@ class _FrameTileState extends State<FrameTile> {
         ),
       ),
     );
+    // A thumbnail's name is cut to fit; the whole of it is a hover away.
+    return widget.thumbnail ? Tooltip(message: name, child: screen) : screen;
   }
 
   void _hover(WidgetNode? node) {
@@ -281,6 +302,42 @@ class _Outline extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Which frame a thumbnail is, across its top: its screen, its state and what else sets it
+/// apart, in the board's words ([Board.nameOf]).
+///
+/// Observed on the first adopter: zoomed out, a column's state label and a tile's caption were
+/// a pixel or two tall, so a reviewer looking for the empty state of a screen opened frames one
+/// by one. Sized as the mark count is, to 14 screen pixels and never past a tenth of the frame.
+class _Name extends StatelessWidget {
+  const _Name(this.name, {required this.scale, required this.fitting});
+
+  final String name;
+  final double scale;
+  final double fitting;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = math.min(14 / scale, fitting / 10);
+    return Align(
+      alignment: Alignment.topCenter,
+      child: IgnorePointer(
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.all(size * 0.3),
+          color: const Color(0xCC15181D),
+          child: Text(
+            name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: size, color: Colors.white),
           ),
         ),
       ),

@@ -2,12 +2,14 @@ import 'package:galley_core/galley_core.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'canvas_model.dart';
+import 'widget_choice.dart';
 
 /// Asks which widget under a click a mark is for, and what the mark says, then raises it.
 ///
 /// Every widget containing the point is offered, deepest first, with the deepest chosen: a
 /// click usually means the smallest thing under it, but a reviewer commenting on a card's
-/// padding means the card, not the text in it. Rejected: pinning the deepest with no choice,
+/// padding means the card, not the text in it. Widgets that fill the same box are one choice
+/// ([WidgetChoice]), named by what a designer sees. Rejected: pinning the deepest with no choice,
 /// which makes a container unmarkable wherever it has a child; and a hierarchy browser, which
 /// shows a reviewer the app's structure when they asked about one spot on the screen.
 Future<void> showComposer(
@@ -56,7 +58,8 @@ class Composer extends StatefulWidget {
 }
 
 class _ComposerState extends State<Composer> {
-  late WidgetNode _node = widget.candidates.first;
+  late final _choices = WidgetChoice.of(widget.candidates);
+  late WidgetChoice _choice = _choices.first;
   final _note = TextEditingController();
   String? _error;
   bool _sending = false;
@@ -74,7 +77,7 @@ class _ComposerState extends State<Composer> {
     });
     final error = await widget.model.raise(
       frame: widget.frame,
-      node: _node,
+      node: _choice.node,
       at: widget.at,
       note: _note.text,
     );
@@ -101,18 +104,18 @@ class _ComposerState extends State<Composer> {
           Text('On', style: Theme.of(context).textTheme.labelLarge),
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 240),
-            child: RadioGroup<WidgetNode>(
-              groupValue: _node,
-              onChanged: (n) => setState(() => _node = n ?? _node),
+            child: RadioGroup<WidgetChoice>(
+              groupValue: _choice,
+              onChanged: (c) => setState(() => _choice = c ?? _choice),
               child: ListView(
                 shrinkWrap: true,
                 children: [
-                  for (final n in widget.candidates)
-                    RadioListTile<WidgetNode>(
-                      value: n,
+                  for (final c in _choices)
+                    RadioListTile<WidgetChoice>(
+                      value: c,
                       dense: true,
-                      title: Text(n.type),
-                      subtitle: Text(describeNode(n)),
+                      title: Text(c.title),
+                      subtitle: Text(c.detail),
                     ),
                 ],
               ),
@@ -151,13 +154,3 @@ class _ComposerState extends State<Composer> {
     ],
   );
 }
-
-/// What tells [n] apart from the other widgets at a point: its key, its semantics label and its
-/// size, those it has.
-String describeNode(WidgetNode n) => [
-  if (n.key case final k?) 'key $k',
-  if (n.semanticsLabel case final s?) '"$s"',
-  '${_px(n.rect.width)} × ${_px(n.rect.height)}',
-].join(' · ');
-
-String _px(double v) => v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);

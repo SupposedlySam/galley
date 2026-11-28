@@ -48,13 +48,28 @@ class BoardViewState extends State<BoardView> {
     final tile = _board.tileOf(frame);
     final viewport = _viewport;
     if (tile == null || viewport == null) return;
-    final s = math.min(1.0, (viewport.height - 48) / tile.screen.height);
+    final s = _focusScale(tile, viewport);
     final cx = tile.screen.left + tile.screen.width / 2;
     final cy = tile.screen.top + tile.screen.height / 2;
     _transform.value = Matrix4.identity()
       ..translateByDouble(viewport.width / 2 - cx * s, viewport.height / 2 - cy * s, 0, 1)
       ..scaleByDouble(s, s, s, 1);
   }
+
+  /// The zoom [showFrame] shows [tile] at: full size, or smaller when that does not fit.
+  static double _focusScale(BoardTile tile, Size viewport) =>
+      math.min(1.0, (viewport.height - 48) / tile.screen.height);
+
+  /// Whether a click on [tile] at [scale] raises a mark there, rather than opening the frame.
+  ///
+  /// A mark is raised only on a frame drawn large enough to see what is clicked: no thumbnail,
+  /// or the size [showFrame] gives it if that is smaller (a short window). Observed on the
+  /// first adopter: at the fitted zoom (about 6%) a first click opened the composer on a frame
+  /// a few pixels wide, offering widgets the reviewer could not see. Rejected: a double click
+  /// to open, which nobody finds, and a separate open button, which is one more thing on a
+  /// tile already too small to read. The 1% allowance is for rounding in the transform.
+  static bool _markable(BoardTile tile, double scale, Size viewport) =>
+      scale >= math.min(thumbnailBelow, _focusScale(tile, viewport) * 0.99);
 
   /// The board's zoom as [InteractiveViewer] reads it: [Matrix4.getMaxScaleOnAxis], the largest
   /// of the x, y and z scales. So every transform set here scales z with x and y, as the
@@ -116,6 +131,8 @@ class BoardViewState extends State<BoardView> {
                                   shown: widget.shown,
                                   scale: scale,
                                   thumbnail: scale < thumbnailBelow,
+                                  markable: _markable(tile, scale, size),
+                                  onOpen: () => showFrame(tile.frame.record.key),
                                 ),
                               ),
                         ],
@@ -150,7 +167,7 @@ class BoardViewState extends State<BoardView> {
       child: Align(
         alignment: Alignment.bottomLeft,
         child: Text(
-          row.flow,
+          row.name,
           maxLines: 1,
           style: TextStyle(
             fontSize: (14 / scale).clamp(40, room * 0.8),

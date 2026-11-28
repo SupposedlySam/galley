@@ -1,6 +1,6 @@
 name: galley_web
 description: "The canvas: every frame of a round in its device, with the marks pinned to it."
-version: 0.3.11
+version: 0.3.12
 # An app, not a library: it ships built, with galley_cli (docs/DESIGN.md D14).
 publish_to: none
 resolution: workspace
