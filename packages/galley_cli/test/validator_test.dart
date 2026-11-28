@@ -3,7 +3,7 @@ library;
 
 import 'dart:io';
 
-import 'package:galley_cli/src/host.dart';
+import 'package:galley_cli/src/server_source.dart';
 import 'package:test/test.dart';
 
 void main() {

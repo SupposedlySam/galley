@@ -46,13 +46,19 @@ final class PinnedPocketBase implements PinnedArchive {
   /// pinned for it.
   static PinnedPocketBase? forAbi([Abi? abi]) {
     final platform = _platforms[abi ?? Abi.current()];
-    if (platform == null) return null;
-    return PinnedPocketBase(
+    return platform == null ? null : forPlatform(platform);
+  }
+
+  /// The pinned release for [platform], PocketBase's name for it (as `linux_amd64`); null
+  /// when PocketBase is not pinned for it.
+  static PinnedPocketBase? forPlatform(String platform) => switch (_sha256[platform]) {
+    final sha256? => PinnedPocketBase(
       version: pocketBaseVersion,
       platform: platform,
-      sha256: _sha256[platform]!,
-    );
-  }
+      sha256: sha256,
+    ),
+    null => null,
+  };
 
   /// The platforms there is a pin for, by PocketBase's name: for saying which, when there is
   /// none for this one.

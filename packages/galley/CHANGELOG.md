@@ -4,6 +4,10 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.11
+
+- No changes. Released with `galley_cli` 0.3.11 (DESIGN D8).
+
 ## 0.3.10
 
 - The packer records each frame's `pixels`, a SHA-256 of its width, height and RGBA bytes, from

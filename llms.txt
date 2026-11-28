@@ -1,15 +1,15 @@
 # Galley
 
 > Galley renders every screen × state × device of a Flutter app as a frame, from inside the app's
-> own `flutter test`, for design review. Version 0.3.10 is the local loop: the renderer writes a
+> own `flutter test`, for design review. Version 0.3.11 is the local loop: the renderer writes a
 > round of PNGs, widget trees, frame records and the round's provenance to disk, and `galley_cli`
 > keeps rounds and marks in a local `.galley/`, carrying every mark into the next round. `galley
 > serve` serves it on loopback with the review canvas. A galley can also live on a Galley server
 > (DESIGN D15), for outside reviewers: `galley host` runs one on this machine and serves the canvas,
-> where a reviewer signs in by a mailed code; hosting one for others is not built yet
-> (docs/ROADMAP.md). The canvas has the reviewer's side: the answers waiting on them, each shown as
-> marked beside the widget now (DESIGN D16), and the frames changed since their last visit (DESIGN
-> D17).
+> where a reviewer signs in by a mailed code, and `galley bundle` writes one out for a Linux host,
+> set by its environment (DESIGN D18, docs/HOSTING.md). The canvas has the reviewer's side: the
+> answers waiting on them, each shown as marked beside the widget now (DESIGN D16), and the frames
+> changed since their last visit (DESIGN D17).
 
 An app adopts Galley by writing one `GalleyHost` subclass in `test/` and calling
 `galley(host)` from a test's `main`. The host declares scenarios (a name and the uris it
@@ -42,15 +42,16 @@ reported as nothing.
 ## Docs
 
 - [README](README.md): adopting Galley, the host, running a round, what a round contains
-- [Design decisions](docs/DESIGN.md): principles and decisions D1–D15, with what each rejected
+- [Design decisions](docs/DESIGN.md): principles and decisions D1–D18, with what each rejected
 - [Boundary](docs/BOUNDARY.md): what Galley assumes about Flutter 3.50, with citations
+- [Hosting](docs/HOSTING.md): a Galley server for reviewers, on Fly.io, set by its environment
 - [Releasing](docs/RELEASING.md): cutting a release, and building and pinning the canvas
 
 ## Packages
 
 - [galley](packages/galley/README.md): the Flutter, test-time package an app depends on
 - [galley_core](packages/galley_core/README.md): the pure-Dart model: frame keys, trees, anchors, re-anchoring, marks, planner, records, the stored round
-- [galley_cli](packages/galley_cli/README.md): the `galley` command: pack, mark, pull --json, answer, verify, reopen, withdraw, serve
+- [galley_cli](packages/galley_cli/README.md): the `galley` command: pack, mark, pull --json, answer, verify, reopen, withdraw, serve, host, bundle, and the server's login, link, push, invite
 - [galley_web](packages/galley_web/README.md): the canvas: the board, marking a widget, threads
 
 ## Optional

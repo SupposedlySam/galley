@@ -2,17 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' show Abi;
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:math';
-import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
 import 'package:galley_core/galley_core.dart';
 
 import 'modes.dart';
 import 'pinned.dart';
 import 'pocketbase.dart';
 import 'rest.dart';
+import 'server_source.dart';
 
 // A Galley server on this machine (docs/DESIGN.md D15): the pinned PocketBase, run with
 // galley_server's schema and hooks and the validator they call, compiled from the source this
@@ -65,12 +63,17 @@ final class LocalServer {
   /// line PocketBase writes. [canvas], a built canvas, is served at `/`, from the same origin
   /// as the API (DESIGN D15); without one, `/` serves the empty `public` in [data].
   ///
+  /// [environment] is added to what PocketBase runs with: an operator's settings, which the
+  /// hooks apply on every start (DESIGN D18), as GALLEY_OWNERS or GALLEY_SMTP_HOST. A hosted
+  /// server reads the same variables, so a test of one here tests the other.
+  ///
   /// Throws [Refused] saying why it could not.
   static Future<LocalServer> start({
     required String data,
     required ArchiveCache cache,
     int port = 8090,
     String? canvas,
+    Map<String, String> environment = const {},
     void Function(String line)? log,
   }) async {
     final pin = PinnedPocketBase.forAbi();
@@ -80,7 +83,7 @@ final class LocalServer {
         'machine (${Abi.current()})',
       );
     }
-    final source = _GalleySource.resolve();
+    final source = GalleySource.resolve();
     final pocketbase = switch (await cache.unpacked(pin)) {
       UnpackedAt(:final directory) => '$directory/${pin.executable}',
       NotUnpacked(:final why) => throw Refused.environment('no PocketBase: $why'),
@@ -95,28 +98,11 @@ final class LocalServer {
     setMode('$data/otp', 0x1c0);
     final superuser = _superuserOf(data);
 
-    final flags = [
-      '--dir=$data/pb_data',
-      // Said, not defaulted. PocketBase takes itself for `go run`, and so for a developer's
-      // build, when it runs from under the user cache directory (tools/osutils/run.go,
-      // v0.40.6), which is where the galley cache is. Then it logs every SQL statement,
-      // users' emails and password hashes among them.
-      '--dev=false',
-      '--migrationsDir=${source.pocketbase}/pb_migrations',
-      '--hooksDir=${source.pocketbase}/pb_hooks',
-      // The schema and hooks are package source, maybe in a read-only pub cache. Automigrate
-      // would write a migration there for each change made in the dashboard; a change to
-      // the schema is a migration written by hand (pb_migrations/1795800000_galley.js).
-      '--automigrate=false',
-      // A change to the hooks is a new CLI, so a new start; and watching restarts PocketBase
-      // underneath the process this holds.
-      '--hooksWatch=false',
-      // Its default is beside the binary, in the cache. The canvas's build is served from
-      // where it is, and not copied into the data directory: the pinned one is kept in the
-      // cache by version, so a copy would be a second one to keep in step. A `--web` given
-      // relative to the shell is read against the same directory: PocketBase inherits it.
-      '--publicDir=${canvas ?? '$data/public'}',
-    ];
+    final flags = serveFlags(
+      data: data,
+      schema: source.pocketbase,
+      public: canvas ?? '$data/public',
+    );
     // The password after `--`, which ends the flags (cobra, as PocketBase reads its command
     // line): a base64url password starts with "-" one time in 32, and was read as a flag
     // ("unknown shorthand flag"). Rejected: a password alphabet without "-". It would leave
@@ -139,7 +125,7 @@ final class LocalServer {
     final process = await Process.start(
       pocketbase,
       ['serve', '--http=127.0.0.1:$at', ...flags],
-      environment: {'GALLEY_VALIDATE': validate, 'GALLEY_OTP_LOG': '$data/otp'},
+      environment: {...environment, 'GALLEY_VALIDATE': validate, 'GALLEY_OTP_LOG': '$data/otp'},
     );
     final tail = <String>[];
     for (final stream in [process.stdout, process.stderr]) {
@@ -265,107 +251,5 @@ Future<void> _healthy(Uri url) async {
     }
   } finally {
     client.close(force: true);
-  }
-}
-
-/// galley_server and galley_core where this CLI was resolved: the schema and hooks, and the
-/// validator's source. Found through the package config, so they are always the versions this
-/// CLI runs with (DESIGN D15: the schema ships with the client).
-/// The validator `galley host` runs, compiled into the cache under [root] when it is not there
-/// yet; its path. Here for its test: two compiles at once each finish.
-Future<String> compiledValidator(String root) => _GalleySource.resolve().validator(root);
-
-final class _GalleySource {
-  const _GalleySource(this.server, this.core, this.packageConfig);
-
-  /// galley_server's root, and galley_core's.
-  final String server, core;
-
-  /// The package config the validator is compiled with.
-  final String packageConfig;
-
-  /// The directory with `pb_migrations` and `pb_hooks`.
-  String get pocketbase => '$server/lib/pocketbase';
-
-  static _GalleySource resolve() {
-    String root(String library) {
-      final uri = Isolate.resolvePackageUriSync(Uri.parse(library));
-      if (uri == null || uri.scheme != 'file') {
-        throw Refused.environment(
-          'galley host needs galley_server\'s source, and could not find $library: run galley '
-          'with `dart run`, not as a compiled executable',
-        );
-      }
-      return File.fromUri(uri).parent.parent.path;
-    }
-
-    final config = Isolate.packageConfigSync;
-    if (config == null || config.scheme != 'file') {
-      throw const Refused.environment('galley host needs the package config galley was run with');
-    }
-    return _GalleySource(
-      root('package:galley_server/judge.dart'),
-      root('package:galley_core/galley_core.dart'),
-      File.fromUri(config).path,
-    );
-  }
-
-  /// The validator compiled from this source, in the cache under [root]: compiled once per
-  /// version of the source and of Dart, by the Dart that runs this CLI.
-  ///
-  /// Keyed by a hash of every file it is compiled from, not by the package's version: a
-  /// checkout between releases has the version of the last one, and a validator compiled from
-  /// other source would judge by other rules.
-  Future<String> validator(String root) async {
-    final input = BytesBuilder(copy: false)..add(utf8.encode(Platform.version));
-    for (final dir in ['$server/bin', '$server/lib', '$core/lib']) {
-      final files = [
-        for (final f in Directory(dir).listSync(recursive: true))
-          if (f is File && f.path.endsWith('.dart')) f,
-      ]..sort((a, b) => a.path.compareTo(b.path));
-      for (final f in files) {
-        input
-          ..add(utf8.encode('\u0000${f.path.substring(dir.length)}\u0000'))
-          ..add(f.readAsBytesSync());
-      }
-    }
-    final hash = sha256.convert(input.takeBytes());
-    final suffix = Platform.isWindows ? '.exe' : '';
-    final exe = '$root/validate/galley_validate-${'$hash'.substring(0, 16)}$suffix';
-    if (File(exe).existsSync()) return exe;
-
-    Directory('$root/validate').createSync(recursive: true);
-    // Compiled into a directory of its own, then renamed into place: two starts at once, in
-    // two processes or in one, each compile their own. Observed: a name made of the pid alone
-    // was shared by two test files in one process, and the first rename took the other's file
-    // ("Cannot rename file ... No such file or directory"). Rejected: a lock. The loser of
-    // the race costs one compile, and a lock left by a killed start would stop every start.
-    final staging = Directory('$root/validate').createTempSync('partial-');
-    final partial = '${staging.path}/galley_validate$suffix';
-    try {
-      final built = await Process.run(Platform.resolvedExecutable, [
-        'compile',
-        'exe',
-        '--packages=$packageConfig',
-        '-o',
-        partial,
-        '$server/bin/galley_validate.dart',
-      ]);
-      if (built.exitCode != 0) {
-        throw Refused.environment(
-          'could not compile the validator with ${Platform.resolvedExecutable}: '
-          '${'${built.stderr}${built.stdout}'.trim()}',
-        );
-      }
-      try {
-        File(partial).renameSync(exe);
-      } on FileSystemException {
-        // Windows will not rename onto a file: another start put the same build there first.
-        if (!File(exe).existsSync()) rethrow;
-      }
-      return exe;
-    } finally {
-      staging.deleteSync(recursive: true);
-    }
   }
 }

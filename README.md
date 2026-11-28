@@ -4,13 +4,13 @@ A design-review canvas for Flutter apps. Every screen × state × device of an a
 a **frame**. Reviewers pin marks to widgets, the marks are answered, and the reviewers verify
 the answers. Rounds stack, and nothing is erased.
 
-**Status: 0.3.10, the local loop, its canvas, and a server.** Galley renders and records a round of
+**Status: 0.3.11, the local loop, its canvas, and a server.** Galley renders and records a round of
 frames from inside an app's own `flutter test`, and `galley_cli` keeps rounds and marks in a local
 galley: pack, mark, pull, answer, verify, with every mark carried into the next round. `galley
 serve` serves that galley on this machine, with the canvas, where its owner marks the round in a
 browser. A galley can also live on a Galley server, where reviewers sign in by a mailed code and
-mark it on the same canvas; `galley host` runs one on this machine, and hosting one for others is
-not built yet ([the plan](docs/ROADMAP.md)).
+mark it on the same canvas; `galley host` runs one on this machine, and `galley bundle` writes one
+out for a host ([docs/HOSTING.md](docs/HOSTING.md)). What is left: [the plan](docs/ROADMAP.md).
 
 | Package | What it is |
 |---|---|
@@ -29,7 +29,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley
-      ref: v0.3.10
+      ref: v0.3.11
 ```
 
 Write one host in `test/`. It is the app's only Galley code:
@@ -107,7 +107,7 @@ dev_dependencies:
     git:
       url: https://github.com/SupposedlySam/galley
       path: packages/galley_cli
-      ref: v0.3.10
+      ref: v0.3.11
 ```
 
 Add `.galley/` to `.gitignore`. Otherwise the earlier rounds make every later round look as if
@@ -151,8 +151,9 @@ build.
 
 For reviewers who are not at the owner's machine, a galley lives on a Galley server (DESIGN
 D15). `galley host` runs one on this machine, writing sign-in codes to a directory rather than
-mailing them, and serves the canvas at its root (the pinned release's, or `--web <dir>`);
-hosting one for others is not built yet.
+mailing them, and serves the canvas at its root (the pinned release's, or `--web <dir>`).
+`galley bundle <dir>` writes the same server out for a Linux host, set by its environment, with
+its codes mailed through your relay: [docs/HOSTING.md](docs/HOSTING.md) hosts it on Fly.io.
 
 ```sh
 dart run galley_cli:galley login <url> --email you@example.com   # asks for the mailed code
@@ -196,6 +197,7 @@ the app never painted, a word broken across lines, inside the picture or out of 
 - [docs/DESIGN.md](docs/DESIGN.md): the principles, every decision, and what each rejected.
 - [docs/BOUNDARY.md](docs/BOUNDARY.md): what Galley assumes about Flutter, with citations.
 - [docs/ROADMAP.md](docs/ROADMAP.md): the steps to the first reviewed round, each one checkable.
+- [docs/HOSTING.md](docs/HOSTING.md): hosting a Galley server for reviewers, on Fly.io.
 - [docs/RELEASING.md](docs/RELEASING.md): cutting a release, and building and pinning the canvas.
 - [llms.txt](llms.txt): the same, for an agent.
 

@@ -4,6 +4,14 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.11
+
+- The hooks apply the operator's settings from the environment on every start (DESIGN D18):
+  `GALLEY_URL`, the SMTP relay (`GALLEY_SMTP_HOST`, `_PORT`, `_TLS`, `_USERNAME`,
+  `_PASSWORD`), the sender (`GALLEY_MAIL_FROM`, `_NAME`), the proxy's client header
+  (`GALLEY_PROXY_HEADER`, for the rate limit), and `GALLEY_OWNERS`, who may sign in uninvited.
+  A setting that cannot be read stops the start, naming it; one left out is left as it is.
+
 ## 0.3.10
 
 - A `visits` collection: each member's last round opened and the one before it, read and

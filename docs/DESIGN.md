@@ -886,3 +886,61 @@ ones that are the same (`changesSince`, `CanvasModel.since`).
   the board's zoom. The toy's img frames draw dark because nothing in them is opaque (no
   Scaffold): their records carry the `unpainted` and `network-image` findings, so the board
   shows through, as it should.
+
+## D18 · A hosted server is a bundle, set by its environment (2026-11-27)
+
+Outside reviewers need a Galley server they can reach (ROADMAP step 8). It is the server
+`galley host` runs, with nothing else added: the same pinned PocketBase, schema, hooks and
+validator. Only where it runs, and who it mails, change.
+
+- **`galley bundle <dir>` writes the server out**, for a machine elsewhere. It writes PocketBase
+  (the pinned release for that platform, checked), the validator compiled for it from the
+  source this CLI judges by, the schema and hooks, the canvas as `public/`, a `run` script, a
+  `Dockerfile` and `bundle.json`. `run` starts PocketBase with the flags `galley host` starts
+  it with (`serveFlags`, said once). Linux is cross-compiled (`dart compile exe --target-os`),
+  so a bundle for a Linux host is written on a Mac. Rejected: a Dockerfile that runs `dart pub
+  get` and compiles the validator itself. It would judge by whatever source the build fetched,
+  and a server whose rules differ from its client's refuses writes the client allows. Also
+  rejected: a bundle with no canvas, which `host` allows. A hosted server is for reviewers,
+  and their link would open nothing.
+- **The operator's settings are environment variables, applied by the hooks on every start**
+  (galley.js, `operator`). `GALLEY_URL` is the public address. `GALLEY_SMTP_*` and
+  `GALLEY_MAIL_*` name the relay the sign-in codes are mailed through. `GALLEY_PROXY_HEADER`
+  names the header the proxy names the client in. `GALLEY_OWNERS` lists who may sign in
+  uninvited. A setting the environment leaves out is left as it is. A setting it cannot read
+  stops the start, naming it: a server that started with its mail half set would refuse every
+  sign-in later, where nobody is looking. Rejected: setting these in PocketBase's dashboard.
+  A setting made there is in no file, and a rebuilt server forgets it. Also rejected: a
+  migration, which runs once, so a changed secret would never reach the server.
+- **Applied when PocketBase has bootstrapped** (`onBootstrap`, after `e.next()`). Its
+  settings are loaded then (core/base.go, v0.40.6), and Galley's own migration, which runs
+  after, changes none of them. `onServe` would be later still, after the migrations, but the
+  JavaScript VM does not offer it (plugins/jsvm/binds.go, `excludeHooks`). The first attempt
+  used it, and PocketBase would not start: "onServe is not defined".
+- **An owner's user is made when they first ask for a code** (`onRecordRequestOTPRequest`),
+  not at start. On a first start the users collection is made by Galley's migration, after
+  bootstrap. Anyone else with no user is answered as PocketBase answers them: an id and no
+  code.
+- **Behind a proxy, the rate limit needs the client's address.** PocketBase limits by
+  `RealIP()`, which reads `trustedProxy.headers` when set and the connection's address
+  otherwise (core/event_request.go, v0.40.6). Behind a proxy, every connection comes from the
+  proxy, so all clients would share one limit, and one guesser would lock out every reviewer.
+  The header is set only behind a proxy that sets it itself. Without one, a client names any
+  address it likes and has a limit of its own for each.
+- **The relay is the operator's.** A host may not send mail itself (Fly.io does not). PocketBase's
+  mailer sends a password only over TLS or to this machine (tools/mailer/smtp.go, v0.40.6), so
+  `GALLEY_SMTP_TLS=true` is TLS from the first byte (port 465), and otherwise the relay must
+  offer STARTTLS.
+- **Tested here, through `LocalServer`**, which passes the same variables to the same hooks
+  (galley_cli's `operator_test.dart`). A sign-in code is mailed to an SMTP relay on loopback,
+  with the configured sender and password, and that code signs in. Each setting that cannot be
+  read stops the start, naming it. Owners sign in, in lower case, and nobody else is made. Two
+  clients named by the proxy header have a limit each. The bundle for this machine is run by
+  its own `run`: it serves the canvas, signs in by code, and its writes are judged. The Linux
+  bundle's executables are x86-64 ELF files (`bundle_test.dart`).
+- *Mutation, 2026-11-27:* 13 mutants of the hooks: each setting dropped, each check of a bad
+  setting skipped, owners not lower-cased, made for anyone or for nobody, and the operator's
+  hook not called. One more of `run`, with `GALLEY_VALIDATE` not exported. All are killed.
+- **Not built:** pinning the Dockerfile's base image by digest; a bundle for arm64 checked by
+  running it; a backup beyond the host's snapshots of the volume; and turning off the
+  dashboard at `/_/`, which a superuser's password guards.

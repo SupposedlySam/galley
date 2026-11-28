@@ -52,3 +52,24 @@ edited by hand, or written by someone who is not a member). They are not work it
 nothing can answer them until the server's superuser mends them; while one is listed,
 `galley push` is refused. On this machine it is always empty: a local galley that does not
 read is refused whole (DESIGN D12).
+
+A galley can live on a Galley server instead (DESIGN D15). Its commands:
+
+```sh
+dart run galley_cli:galley host [--port 8090] [--data <dir>] [--owner you@example.com] [--web <dir>]
+dart run galley_cli:galley bundle <dir> [--platform linux_amd64|linux_arm64] [--web <dir>]
+dart run galley_cli:galley login <url> --email you@example.com
+dart run galley_cli:galley link <url> (--create '<name>' | --galley <id>) [--alias <name>]
+dart run galley_cli:galley push [--resume]
+dart run galley_cli:galley invite <email>
+dart run galley_cli:galley members
+dart run galley_cli:galley revoke <alias> [--restore]
+dart run galley_cli:galley unlink
+```
+
+`host` runs one on this machine, and writes each sign-in code to a file instead of mailing it.
+`bundle` writes the same server to `<dir>` for a host elsewhere: PocketBase, the validator
+compiled for that platform, the schema and hooks, the canvas, and a `run` and `Dockerfile`.
+The server's settings are its environment's (`GALLEY_URL`, `GALLEY_SMTP_*`, `GALLEY_MAIL_*`,
+`GALLEY_PROXY_HEADER`, `GALLEY_OWNERS`), applied on every start (DESIGN D18).
+[docs/HOSTING.md](../../docs/HOSTING.md) hosts it on Fly.io.

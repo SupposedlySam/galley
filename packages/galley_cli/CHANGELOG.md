@@ -4,6 +4,19 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
+## 0.3.11
+
+Hosting (ROADMAP step 8, DESIGN D18, docs/HOSTING.md):
+- `galley bundle <dir>` writes a Galley server for a Linux host (`--platform linux_amd64`, the
+  default, or `linux_arm64`): the pinned PocketBase for it, the validator cross-compiled for it
+  from the source this CLI judges by, the schema and hooks, the canvas as `public/` (the pinned
+  one, or `--web <dir>`), a `run` script, a `Dockerfile` and `bundle.json`. It refuses a
+  directory that is not empty, and a bundle with no canvas.
+- `galley host --owner` is passed to the server as `GALLEY_OWNERS`: the owner's user is made
+  when they first ask for a code, not when the server starts.
+- `galley host` and a bundle's `run` start PocketBase with the same flags, said once.
+- The canvas pinned is still 0.3.10's: it has not changed.
+
 ## 0.3.10
 
 - `galley pull --json` gives each mark's `raised_in`, the round it was raised on, beside

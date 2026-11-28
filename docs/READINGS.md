@@ -15,3 +15,4 @@ cannot tell you that a page stopped making sense; a reader can.
 | `packages/galley_cli/README.md` | 2026-11-26 | 0.3.8 | |
 | `packages/galley_web/README.md` | 2026-11-26 | written then | |
 | `docs/RELEASING.md` | 2026-11-26 | written then | |
+| `docs/HOSTING.md` | 2026-11-27 | written then | Fly.io; the client header checked against Fly's docs, not a live proxy |

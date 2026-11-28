@@ -117,4 +117,131 @@ function visitOf(record) {
   return before === 0 ? { latest } : { latest, before };
 }
 
-module.exports = { judge, json, members, markRow, history, newest, finished, visitOf };
+/// The user whose email is [email], lower-cased, made if there is none: nobody signs up, so an
+/// invite and an operator's owner are each how a user comes to be. Made with a password nobody
+/// knows, since a user signs in by a mailed code only.
+function userFor(app, email) {
+  const lower = email.toLowerCase();
+  try {
+    return app.findAuthRecordByEmail("users", lower);
+  } catch (_) {
+    const user = new Record(app.findCollectionByNameOrId("users"));
+    user.setEmail(lower);
+    user.setRandomPassword();
+    app.save(user);
+    return user;
+  }
+}
+
+/// The operator's settings, from the environment, applied to [app] on every start (docs/
+/// DESIGN.md D18). The environment is the truth: a change made in PocketBase's dashboard to a
+/// setting named here is undone by the next start, so a deployment says its settings once, in
+/// its configuration, and never drifts from it.
+///
+/// - GALLEY_URL: the server's public address, which PocketBase puts in its mails.
+/// - GALLEY_SMTP_HOST, with GALLEY_SMTP_PORT (587), GALLEY_SMTP_USERNAME,
+///   GALLEY_SMTP_PASSWORD and GALLEY_SMTP_TLS ("true" for TLS from the first byte, as on 465;
+///   otherwise STARTTLS, which PocketBase's mailer requires before it sends a password to any
+///   host but this one): the relay the sign-in codes are mailed through. GALLEY_MAIL_FROM is
+///   then required, and GALLEY_MAIL_NAME names the sender ("Galley").
+/// - GALLEY_PROXY_HEADER: the header the proxy in front of the server names the client in
+///   (Fly-Client-IP on Fly.io). Without it, behind a proxy, every client is the proxy, and the
+///   rate limit is one limit for all of them.
+/// - GALLEY_OWNERS: emails, comma separated, who may sign in uninvited, and so make a galley
+///   ([owners]).
+///
+/// A setting the environment leaves out is left as it is. Settings it cannot read throw, and
+/// the server does not start: a server that started with its mail half set would refuse every
+/// sign-in later, where nobody is looking.
+function operator(app) {
+  const env = (name) => ($os.getenv(name) || "").trim();
+  const settings = app.settings();
+  let changed = false;
+
+  const url = env("GALLEY_URL");
+  if (url) {
+    if (!/^https?:\/\/[^\s/]+/.test(url)) {
+      throw new Error(`galley: GALLEY_URL is not an http(s) address: ${url}`);
+    }
+    settings.meta.appURL = url.replace(/\/+$/, "");
+    changed = true;
+  }
+
+  const host = env("GALLEY_SMTP_HOST");
+  const smtpRest = [
+    "GALLEY_SMTP_PORT",
+    "GALLEY_SMTP_USERNAME",
+    "GALLEY_SMTP_PASSWORD",
+    "GALLEY_SMTP_TLS",
+    "GALLEY_MAIL_FROM",
+    "GALLEY_MAIL_NAME",
+  ].filter((n) => env(n));
+  if (!host && smtpRest.length) {
+    throw new Error(`galley: ${smtpRest.join(", ")} set without GALLEY_SMTP_HOST`);
+  }
+  if (host) {
+    const portText = env("GALLEY_SMTP_PORT") || "587";
+    const port = Number(portText);
+    if (!/^[0-9]+$/.test(portText) || port < 1 || port > 65535) {
+      throw new Error(`galley: GALLEY_SMTP_PORT is not a port: ${portText}`);
+    }
+    const tls = env("GALLEY_SMTP_TLS") || "false";
+    if (tls !== "true" && tls !== "false") {
+      throw new Error(`galley: GALLEY_SMTP_TLS is "true" or "false", not ${tls}`);
+    }
+    const from = env("GALLEY_MAIL_FROM");
+    if (!/^[^\s@]+@[^\s@]+$/.test(from)) {
+      throw new Error(`galley: GALLEY_SMTP_HOST needs GALLEY_MAIL_FROM, an address: "${from}"`);
+    }
+    const username = env("GALLEY_SMTP_USERNAME");
+    const password = $os.getenv("GALLEY_SMTP_PASSWORD") || "";
+    if (!username !== !password) {
+      throw new Error("galley: GALLEY_SMTP_USERNAME and GALLEY_SMTP_PASSWORD are set together");
+    }
+    settings.smtp.enabled = true;
+    settings.smtp.host = host;
+    settings.smtp.port = port;
+    settings.smtp.tls = tls === "true";
+    settings.smtp.username = username;
+    settings.smtp.password = password;
+    settings.meta.senderAddress = from;
+    settings.meta.senderName = env("GALLEY_MAIL_NAME") || "Galley";
+    changed = true;
+  }
+
+  const header = env("GALLEY_PROXY_HEADER");
+  if (header) {
+    settings.trustedProxy.headers = [header];
+    changed = true;
+  }
+
+  if (changed) app.save(settings);
+  owners();
+}
+
+/// GALLEY_OWNERS, lower-cased: who may sign in without an invite. Throws for one that is not
+/// an email.
+function owners() {
+  const listed = ($os.getenv("GALLEY_OWNERS") || "").trim();
+  return (listed ? listed.split(",") : []).map((s) => {
+    const email = s.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+$/.test(email)) {
+      throw new Error(`galley: GALLEY_OWNERS has something that is not an email: "${s.trim()}"`);
+    }
+    return email;
+  });
+}
+
+module.exports = {
+  judge,
+  json,
+  members,
+  markRow,
+  history,
+  newest,
+  finished,
+  visitOf,
+  userFor,
+  operator,
+  owners,
+};

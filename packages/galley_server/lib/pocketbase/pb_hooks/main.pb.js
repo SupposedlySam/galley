@@ -218,18 +218,35 @@ onRecordCreateExecute((e) => {
   e.app.runInTransaction((tx) => {
     const email = e.record.getString("email").toLowerCase();
     e.record.set("email", email);
-    try {
-      tx.findAuthRecordByEmail("users", email);
-    } catch (_) {
-      const user = new Record(tx.findCollectionByNameOrId("users"));
-      user.setEmail(email);
-      user.setRandomPassword();
-      tx.save(user);
-    }
+    require(`${__hooks}/galley.js`).userFor(tx, email);
     e.app = tx;
     e.next();
   });
 }, "invites");
+
+// The operator's settings, from the environment, on every start (galley.js, `operator`).
+// Applied once PocketBase has bootstrapped, when its settings are loaded (core/base.go,
+// v0.40.6: Bootstrap runs the system migrations, then ReloadSettings). Galley's own migration
+// runs after, and changes none of these. Rejected: onServe, which the JavaScript VM does not
+// offer (plugins/jsvm/binds.go, excludeHooks); and a migration, which runs once, so a
+// deployment's changed secret would never reach the server.
+onBootstrap((e) => {
+  e.next();
+  require(`${__hooks}/galley.js`).operator(e.app);
+});
+
+// An owner the operator listed (GALLEY_OWNERS) asks for a code and has no user yet: one is
+// made now, so the code is sent. Made when asked for, not at start: on a first start the users
+// collection is made by Galley's migration, after bootstrap. Anyone else with no user is
+// answered as PocketBase answers them, with an id and no code (apis/record_auth_otp_request.go).
+onRecordRequestOTPRequest((e) => {
+  if (!e.record) {
+    const g = require(`${__hooks}/galley.js`);
+    const email = `${e.requestInfo().body.email || ""}`.toLowerCase();
+    if (g.owners().includes(email)) e.record = g.userFor(e.app, email);
+  }
+  e.next();
+}, "users");
 
 // A sign-in code is mailed only when SMTP is set. With none, PocketBase would hand the mail
 // to this machine's `sendmail`; instead the code is written to GALLEY_OTP_LOG, which

@@ -8,6 +8,7 @@ import 'package:galley_core/galley_core.dart';
 import 'package:galley_server/galley_server.dart';
 import 'package:http/http.dart' as http;
 
+import 'bundle.dart';
 import 'canvas.dart';
 import 'pinned.dart';
 import 'galley_directory.dart';
@@ -15,6 +16,8 @@ import 'galley_server.dart';
 import 'host.dart';
 import 'linked.dart';
 import 'local_galley.dart';
+import 'pocketbase.dart';
+import 'server_source.dart';
 import 'renderer.dart';
 
 part 'cli_server.dart';
@@ -108,6 +111,7 @@ Future<int> runGalley(List<String> args, [GalleyContext? context]) async {
     ..addCommand(_Withdraw(c))
     ..addCommand(_Serve(c))
     ..addCommand(_Host(c))
+    ..addCommand(_Bundle(c))
     ..addCommand(_Login(c))
     ..addCommand(_Link(c))
     ..addCommand(_Unlink(c))
@@ -659,10 +663,12 @@ final class _Host extends _GalleyCommand {
         CanvasAt(:final directory) => directory,
         NoCanvas() => null,
       },
+      // The operator's setting a hosted server reads (DESIGN D18), so `--owner` here is
+      // GALLEY_OWNERS there, made by the same hook.
+      environment: {'GALLEY_OWNERS': ?_args.option('owner')},
     );
     try {
       if (_args.option('owner') case final owner?) {
-        await server.ensureUser(owner);
         c.out.writeln('${owner.toLowerCase()} can sign in');
       }
       c.out
@@ -692,5 +698,79 @@ final class _Host extends _GalleyCommand {
     } finally {
       await server.close();
     }
+  }
+}
+
+final class _Bundle extends _GalleyCommand {
+  _Bundle(super.c) {
+    argParser.addOption(
+      'platform',
+      defaultsTo: 'linux_amd64',
+      help:
+          'The machine it runs on: linux_amd64, linux_arm64, or this one '
+          '(${PinnedPocketBase.forAbi()?.platform ?? 'none'}).',
+      valueHelp: 'name',
+    );
+    addWeb();
+  }
+
+  @override
+  String get name => 'bundle';
+
+  @override
+  String get invocation => 'galley bundle <dir>';
+
+  @override
+  String get description =>
+      'Write a Galley server to <dir>, for a machine elsewhere: PocketBase, the validator '
+      'compiled for it, the schema, the canvas, a run script and a Dockerfile (docs/HOSTING.md).';
+
+  @override
+  Future<int> run() async {
+    final rest = _args.rest;
+    if (rest.length != 1) throw UsageException('give the directory to write it to', usage);
+    final platform = _args.option('platform')!;
+    final pin = PinnedPocketBase.forPlatform(platform);
+    if (pin == null || targetOf(platform) == null) {
+      throw UsageException(
+        '--platform is linux_amd64, linux_arm64 or ${PinnedPocketBase.forAbi()?.platform}, '
+        'not $platform',
+        usage,
+      );
+    }
+    final cache = cacheDirectory(c.environment);
+    if (cache == null) {
+      throw const Refused.environment(
+        'there is nowhere to cache PocketBase: set GALLEY_CACHE, or HOME',
+      );
+    }
+    final canvas = switch (await canvasToServe()) {
+      CanvasAt(:final directory) => directory,
+      // Refused, where `host` serves the API alone: a hosted server is for reviewers, and
+      // their link would open nothing.
+      NoCanvas(:final why) => throw Refused.environment(
+        'no canvas to serve: $why. `--web <dir>` bundles a built one.',
+      ),
+    };
+    final pocketbase = switch (await ArchiveCache(cache, fetch: c.fetch).unpacked(pin)) {
+      UnpackedAt(:final directory) => '$directory/${pin.executable}',
+      NotUnpacked(:final why) => throw Refused.environment('no PocketBase: $why'),
+    };
+    c.out.writeln('Writing a Galley server for $platform to ${rest.single}');
+    await writeBundle(
+      to: rest.single,
+      platform: platform,
+      pocketbase: pocketbase,
+      source: GalleySource.resolve(),
+      cache: cache,
+      canvas: canvas,
+      canvasNamed: _args.option('web') == null ? 'release ${c.canvas.version}' : 'a build',
+      made: c.now(),
+    );
+    c.out.writeln(
+      'Written. `fly deploy ${rest.single} --config <fly.toml> --ha=false` deploys it '
+      '(docs/HOSTING.md).',
+    );
+    return 0;
   }
 }
