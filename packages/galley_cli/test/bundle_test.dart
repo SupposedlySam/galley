@@ -152,8 +152,9 @@ void main() {
 
   test('for Linux: Linux executables, the schema, the canvas, and how it was made', () async {
     final to = '${tmp.path}/linux';
-    final (code, _, err) = await bundle([to, '--web', canvas()]);
+    final (code, out, err) = await bundle([to, '--web', canvas()]);
     expect((code, err), (0, ''));
+    expect(out, contains('cd $to && fly deploy --ha=false --remote-only'));
 
     List<String> entries(String dir) => [
       for (final e in Directory(dir).listSync(recursive: true))

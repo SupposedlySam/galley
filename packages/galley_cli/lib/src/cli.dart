@@ -768,8 +768,10 @@ final class _Bundle extends _GalleyCommand {
       made: c.now(),
     );
     c.out.writeln(
-      'Written. `fly deploy ${rest.single} --config <fly.toml> --ha=false` deploys it '
-      '(docs/HOSTING.md).',
+      // As docs/HOSTING.md says it: flyctl reads fly.toml from the directory it runs in, and
+      // builds from it. Fly's docs leave open whether `fly deploy <dir>` reads <dir>'s own.
+      'Written. Put a fly.toml in it, then `cd ${rest.single} && fly deploy --ha=false '
+      '--remote-only` (docs/HOSTING.md).',
     );
     return 0;
   }

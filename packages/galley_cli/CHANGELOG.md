@@ -8,6 +8,8 @@ patch (DESIGN D8).
 
 - A bundle's Dockerfile names its Debian base by digest, not by the tag alone, so a server
   rebuilt from the same bundle runs on the same system (DESIGN D18).
+- `galley bundle` says to deploy as docs/HOSTING.md does: a fly.toml in the bundle, and
+  `fly deploy` run from there.
 
 ## 0.3.11
 
