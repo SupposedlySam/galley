@@ -4,7 +4,7 @@ All notable changes to this package. It follows [semantic versioning](https://se
 1.0, a minor version is a breaking change, and every other release, new features included, is a
 patch (DESIGN D8).
 
-## 0.3.9 (unreleased)
+## 0.3.9
 
 A Galley server on this machine (DESIGN D15):
 - `galley host` runs PocketBase 0.40.6 with `galley_server`'s schema and hooks, on loopback.
